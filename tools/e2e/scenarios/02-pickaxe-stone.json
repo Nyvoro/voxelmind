@@ -1,0 +1,6 @@
+[
+  {"wait": 6000, "chat": "Hey Lysa! Ich brauche 5 Stein. Kannst du mir die holen? Wenn du eine Spitzhacke brauchst, bau dir eine."},
+  {"wait": 210000, "inventory": true},
+  {"wait": 1000, "chat": "/vml list"},
+  {"wait": 2000}
+]

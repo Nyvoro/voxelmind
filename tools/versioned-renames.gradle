@@ -1,0 +1,119 @@
+// Per-target compiler symbol renames, applied by prepareVersionedSources (build.gradle)
+// to a copy of src/main/java. The checked-in source uses the Minecraft 26.2 names; each
+// rule below turns a 26.2 spelling into the spelling of older targets.
+//
+// Rules are applied line by line, in insertion order. A key starting with "re:" is a Java
+// regex (replaceAll), anything else is a literal substring. Keep specific spellings before
+// generic ones. Anything that is more than a rename belongs into //? Stonecutter blocks or
+// into a compat helper instead.
+
+ext.versionedRenames = { List<Integer> v ->
+    def atLeast = { int major, int minor, int patch = 0 ->
+        if (v[0] != major) return v[0] > major
+        if (v[1] != minor) return v[1] > minor
+        return v[2] >= patch
+    }
+    def r = new LinkedHashMap<String, String>()
+
+    // 26.2 moved the screen handle onto Minecraft.gui.
+    if (!atLeast(26, 2)) {
+        r["re:(?<![\\w.])(client|minecraft|mc)\\.gui\\.screen\\(\\)"] = '$1.screen'
+        r[".gui.setScreen("] = ".setScreen("
+    }
+
+    // 26.2 split the entity type constants into EntityTypes.
+    if (!atLeast(26, 2)) {
+        r["re:\\bEntityTypes\\b"] = "EntityType"
+    }
+
+    // The 26.1 line: GUI extraction API instead of immediate drawing, Fabric API renames, clock accessors, payload registry.
+    if (!atLeast(26, 1)) {
+        r["PlayerFaceExtractor.extractRenderState("] = "PlayerFaceRenderer.draw("
+        r["PlayerFaceExtractor"] = "PlayerFaceRenderer"
+        r["GuiGraphicsExtractor"] = "GuiGraphics"
+        r["re:\\bg\\.text\\("] = "g.drawString("
+        r["g.centeredText("] = "g.drawCenteredString("
+        r["void extractRenderState(GuiGraphics"] = "void render(GuiGraphics"
+        r["super.extractRenderState("] = "super.render("
+        r["extractBackground("] = "renderBackground("
+        r["public void extractContent("] = "public void renderContent("
+        r["client.keymapping.v1.KeyMappingHelper"] = "client.keybinding.v1.KeyBindingHelper"
+        r["KeyMappingHelper.registerKeyMapping"] = "KeyBindingHelper.registerKeyBinding"
+        r["ServerEntityLevelChangeEvents"] = "ServerEntityWorldChangeEvents"
+        r["AFTER_PLAYER_CHANGE_LEVEL"] = "AFTER_PLAYER_CHANGE_WORLD"
+        r["Screens.getWidgets"] = "Screens.getButtons"
+        r[".entityTags()"] = ".getTags()"
+        r[".getDefaultClockTime()"] = ".getDayTime()"
+        r[".getOverworldClockTime()"] = ".getDayTime()"
+        r["PayloadTypeRegistry.clientboundPlay()"] = "PayloadTypeRegistry.playS2C()"
+        r["PayloadTypeRegistry.serverboundPlay()"] = "PayloadTypeRegistry.playC2S()"
+        r["g.item("] = "g.renderItem("
+        r["re:client\\.player\\.sendSystemMessage\\((.*)\\);"] = 'client.player.displayClientMessage($1, false);'
+    }
+
+    // 1.21.11: Identifier/Util renames, permission sets, villager package, enum -> record, builder args.
+    if (!atLeast(1, 21, 11)) {
+        r["re:\\bIdentifier\\b"] = "ResourceLocation"
+        r[".identifier()"] = ".location()"
+        r["net.minecraft.util.Util"] = "net.minecraft.Util"
+        r["npc.villager.AbstractVillager"] = "npc.AbstractVillager"
+        r["problem.message()"] = "problem.getMessage()"
+        r['re:^(.*CycleButton\\.<\\w+>builder\\(.*), (\\w+)\\)$'] = '$1).withInitialValue($2)'
+        r["import net.minecraft.server.permissions.Permissions;"] = ""
+        r["import net.minecraft.server.permissions.LevelBasedPermissionSet;"] = ""
+        r["LevelBasedPermissionSet.ADMIN"] = "4"
+        r["player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)"] = "player.hasPermissions(2)"
+        r["Commands.hasPermission(Commands.LEVEL_GAMEMASTERS).test(src)"] = "src.hasPermission(Commands.LEVEL_GAMEMASTERS)"
+    }
+
+    // 1.21.2: registry getValue/get, build height accessors, spawn reasons, default skin.
+    if (!atLeast(1, 21, 2)) {
+        r['re:BuiltInRegistries\\.(\\w+)\\.getValue\\('] = 'BuiltInRegistries.$1.get('
+        r[".getMinY()"] = ".getMinBuildHeight()"
+        r["level.getMaxY()"] = "(level.getMaxBuildHeight() - 1)"
+        r[".create(at, net.minecraft.world.entity.EntitySpawnReason.COMMAND)"] = ".create(at)"
+        r["DefaultPlayerSkin.getDefaultSkin()"] = "DefaultPlayerSkin.get(new java.util.UUID(0L, 0L))"
+    }
+
+    // 1.21.4: getOrLoad returned the skin directly.
+    if (!atLeast(1, 21, 4)) {
+        r[".thenAccept(result -> result.ifPresent(s -> LOADED.put(key, s)))"] = ".thenAccept(s -> LOADED.put(key, s))"
+    }
+
+    // 1.21.5: click/hover events became records, snapTo, gameMode(), selected slot accessors.
+    if (!atLeast(1, 21, 5)) {
+        r["new HoverEvent.ShowText("] = "new HoverEvent(HoverEvent.Action.SHOW_TEXT, "
+        r["new ClickEvent.RunCommand("] = "new ClickEvent(ClickEvent.Action.RUN_COMMAND, "
+        r["new ClickEvent.CopyToClipboard("] = "new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, "
+        // OpenUrl takes a URI, the old constructor a String; the argument is at most two parentheses deep.
+        r['re:new ClickEvent\\.OpenUrl\\(((?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*)\\)'] = 'new ClickEvent(ClickEvent.Action.OPEN_URL, ($1).toString())'
+        r[".snapTo("] = ".moveTo("
+        r["p.gameMode()"] = "p.gameMode.getGameModeForPlayer()"
+        r[".getSelectedSlot()"] = ".selected"
+        r['re:\\.setSelectedSlot\\((\\w+)\\);'] = '.selected = $1;'
+    }
+
+    // 1.21.6: deferred tooltips, send(..., ChannelFutureListener).
+    if (!atLeast(1, 21, 6)) {
+        r["g.setComponentTooltipForNextFrame("] = "g.renderComponentTooltip("
+        r["g.setTooltipForNextFrame(font, "] = "g.renderTooltip(font, "
+        r["import io.netty.channel.ChannelFutureListener;"] = "import net.minecraft.network.PacketSendListener;"
+        r["ChannelFutureListener"] = "PacketSendListener"
+    }
+
+    // 1.21.9: GameProfile became a record, NameAndId appeared.
+    if (!atLeast(1, 21, 9)) {
+        r["new NameAndId(player.getUUID(), player.getGameProfile().name())"] = "player.getGameProfile()"
+        r[".nameAndId()"] = ".getGameProfile()"
+        r["import net.minecraft.server.players.NameAndId;"] = ""
+        // Hints are drawn dark gray by the game from 1.21.9; before that they came out as plain text.
+        r['re:\\.setHint\\(((?:[^()]|\\([^()]*\\))*)\\);'] = '.setHint(($1).copy().withStyle(net.minecraft.ChatFormatting.DARK_GRAY));'
+        r[".getGameProfile().name()"] = ".getGameProfile().getName()"
+        r["net.minecraft.world.entity.player.PlayerSkin"] = "net.minecraft.client.resources.PlayerSkin"
+        r[".getSkinManager().get(profile)"] = ".getSkinManager().getOrLoad(profile)"
+        r["keyBox.addFormatter("] = "keyBox.setFormatter("
+        r["KeyMapping.Category.MISC"] = '"key.categories.misc"'
+        r["mc.services().sessionService()"] = "mc.getMinecraftSessionService()"
+    }
+    return r
+}

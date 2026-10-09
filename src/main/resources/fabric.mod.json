@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "voxelmind_local",
+  "version": "${version}",
+  "name": "VoxelMind Local",
+  "description": "An AI companion that lives inside your world. Runs entirely in this mod with your own LLM key.",
+  "authors": [
+    "Nyvoro UG"
+  ],
+  "contact": {
+    "homepage": "https://voxel-mind.com"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.voxelmind.local.VoxelMindLocal"
+    ],
+    "client": [
+      "com.voxelmind.local.client.VoxelMindLocalClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}",
+    "fabric-api": ">=${fabric_version}"
+  },
+  "mixins": [
+    "voxelmind_local.mixins.json"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "voxelmind_local_test",
+  "version": "1.0.0",
+  "name": "VoxelMind Local game tests",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": [
+      "com.voxelmind.local.test.BodyGameTests",
+      "com.voxelmind.local.test.SettingsGameTests",
+      "com.voxelmind.local.hosted.HostedGameTests"
+    ],
+    "fabric-client-gametest": [
+      "com.voxelmind.local.test.SingleplayerClientTest"
+    ]
+  },
+  "depends": {
+    "voxelmind_local": "*"
+  }
+}

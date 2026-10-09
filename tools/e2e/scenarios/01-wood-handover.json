@@ -1,0 +1,13 @@
+[
+  {"wait": 3000, "chat": "/time set 1000"},
+  {"wait": 1000, "chat": "/place feature minecraft:oak ~7 ~ ~2"},
+  {"wait": 800, "chat": "/place feature minecraft:birch ~-6 ~ ~6"},
+  {"wait": 800, "chat": "/place feature minecraft:oak ~2 ~ ~-8"},
+  {"wait": 1500, "chat": "/vml summon Lysa froehlich, neugierig und ein bisschen frech; liebt Abenteuer"},
+  {"wait": 20000, "chat": "Hallo Lysa! Wie geht's dir?"},
+  {"wait": 20000, "chat": "Kannst du mir bitte 3 Holz sammeln?"},
+  {"wait": 100000, "chat": "Super! Komm zu mir und gib mir bitte das Holz."},
+  {"wait": 40000, "inventory": true},
+  {"wait": 1000, "chat": "/vml list"},
+  {"wait": 3000}
+]

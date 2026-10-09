@@ -1,0 +1,272 @@
+package com.voxelmind.local.body;
+
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jspecify.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.PriorityQueue;
+import java.util.function.Predicate;
+
+/**
+ * A* over standing positions of a player-sized body. Walking mode: walk, diagonal
+ * walk, one-block jumps, drops of up to three blocks, swimming. Digging mode adds
+ * mining through natural terrain and building one-block pillar steps with
+ * carried blocks; their cost is the real break time.
+ */
+public final class PathFinder {
+    private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+    public static final int MAX_DROP = 3;
+    private static final double BLOCKED = Double.MAX_VALUE;
+
+    /** Walking only, or also digging/building for a given body. */
+    public record Mode(boolean dig, boolean pillar, @Nullable CompanionPlayer body, @Nullable Predicate<BlockPos> protect) {
+        public static final Mode WALK = new Mode(false, false, null, null);
+    }
+
+    public record Result(List<BlockPos> path, boolean reachesGoal, int expanded) {
+        public boolean isEmpty() {
+            return path.isEmpty();
+        }
+    }
+
+    private static final class Node implements Comparable<Node> {
+        final BlockPos pos;
+        double g;
+        double f;
+        Node parent;
+        boolean closed;
+
+        Node(BlockPos pos) {
+            this.pos = pos;
+        }
+
+        @Override
+        public int compareTo(Node other) {
+            return Double.compare(f, other.f);
+        }
+    }
+
+    private PathFinder() {}
+
+    public static Result find(Level level, BlockPos start, BlockPos target, Predicate<BlockPos> goal, int maxNodes) {
+        return find(level, start, target, goal, maxNodes, Mode.WALK);
+    }
+
+    /**
+     * Searches from {@code start} until {@code goal} accepts a position. When the
+     * node budget runs out, returns the path to the explored position closest to
+     * {@code target} so the caller can walk there and search again.
+     */
+    public static Result find(Level level, BlockPos start, BlockPos target, Predicate<BlockPos> goal, int maxNodes, Mode mode) {
+        Long2ObjectOpenHashMap<Node> nodes = new Long2ObjectOpenHashMap<>();
+        PriorityQueue<Node> open = new PriorityQueue<>();
+        Node first = new Node(start);
+        first.g = 0;
+        first.f = heuristic(start, target);
+        nodes.put(start.asLong(), first);
+        open.add(first);
+        Node best = first;
+        double bestH = first.f;
+        int expanded = 0;
+
+        while (!open.isEmpty() && expanded < maxNodes) {
+            Node current = open.poll();
+            if (current.closed) continue;
+            current.closed = true;
+            expanded++;
+            if (goal.test(current.pos)) return new Result(trace(current), true, expanded);
+            double h = heuristic(current.pos, target);
+            if (h < bestH) {
+                bestH = h;
+                best = current;
+            }
+            for (Step step : neighbours(level, current.pos, mode)) {
+                Node next = nodes.get(step.pos.asLong());
+                if (next == null) {
+                    next = new Node(step.pos);
+                    next.g = Double.MAX_VALUE;
+                    nodes.put(step.pos.asLong(), next);
+                }
+                if (next.closed) continue;
+                double g = current.g + step.cost;
+                if (g < next.g) {
+                    next.g = g;
+                    next.f = g + heuristic(step.pos, target);
+                    next.parent = current;
+                    open.add(next);
+                }
+            }
+        }
+        return new Result(best == first ? List.of() : trace(best), false, expanded);
+    }
+
+    private record Step(BlockPos pos, double cost) {}
+
+    private static List<Step> neighbours(Level level, BlockPos pos, Mode mode) {
+        List<Step> out = new ArrayList<>(16);
+        boolean inWater = isWater(level, pos);
+        for (int[] d : DIRS) {
+            boolean diagonal = d[0] != 0 && d[1] != 0;
+            BlockPos side = pos.offset(d[0], 0, d[1]);
+            if (diagonal) {
+                if (!bodyFits(level, pos.offset(d[0], 0, 0)) || !bodyFits(level, pos.offset(0, 0, d[1]))) continue;
+                if (standable(level, side)) out.add(new Step(side, 1.414 + penalty(level, side)));
+                continue;
+            }
+            if (standable(level, side)) {
+                out.add(new Step(side, 1.0 + penalty(level, side)));
+                continue;
+            }
+            BlockPos up = side.above();
+            if (passable(level, pos.above(2)) && standable(level, up)) {
+                out.add(new Step(up, 2.0 + penalty(level, up)));
+                continue;
+            }
+            boolean dropped = false;
+            if (bodyFits(level, side)) {
+                for (int k = 1; k <= MAX_DROP; k++) {
+                    BlockPos down = side.below(k);
+                    if (standable(level, down)) {
+                        out.add(new Step(down, 1.0 + 0.5 * k + penalty(level, down)));
+                        dropped = true;
+                        break;
+                    }
+                    if (!passable(level, down)) break;
+                }
+            }
+            if (!mode.dig() || dropped || inWater) continue;
+            // Digging moves: through the side cells, up a step, or down a step.
+            double flat = clear(level, side, mode) + clear(level, side.above(), mode);
+            if (flat < BLOCKED && isFloor(level, side.below())) {
+                out.add(new Step(side, 1.0 + flat));
+            } else if (flat < BLOCKED && flat > 0) {
+                BlockPos landing = landing(level, side);
+                if (landing != null) out.add(new Step(landing, 1.0 + flat + 0.5 * (side.getY() - landing.getY())));
+            }
+            double stepUp = clear(level, pos.above(2), mode) + clear(level, up, mode) + clear(level, up.above(), mode);
+            if (stepUp < BLOCKED && isFloor(level, side)) {
+                out.add(new Step(up, 2.0 + stepUp));
+            }
+            BlockPos downStep = side.below();
+            double stepDown = clear(level, side.above(), mode) + clear(level, side, mode) + clear(level, downStep, mode);
+            if (stepDown < BLOCKED && isFloor(level, downStep.below())) {
+                out.add(new Step(downStep, 1.5 + stepDown));
+            }
+        }
+        if (inWater) {
+            BlockPos up = pos.above();
+            if (passable(level, up.above()) && (isWater(level, up) || standable(level, up))) out.add(new Step(up, 1.5));
+            BlockPos down = pos.below();
+            if (isWater(level, down) && passable(level, down)) out.add(new Step(down, 1.5));
+        }
+        if (mode.pillar() && !inWater && isFloor(level, pos.below())) {
+            double head = clear(level, pos.above(2), mode);
+            if (head < BLOCKED) out.add(new Step(pos.above(), 3.0 + head));
+        }
+        if (mode.dig() && !inWater) {
+            BlockPos down = pos.below();
+            double cost = clear(level, down, mode);
+            if (cost > 0 && cost < BLOCKED && !isHazardBelow(level, down)) {
+                BlockPos landing = isFloor(level, down.below()) ? down : landing(level, down);
+                if (landing != null) out.add(new Step(landing, 2.0 + cost + 0.5 * (down.getY() - landing.getY())));
+            }
+        }
+        return out;
+    }
+
+    /** Cost of making a cell passable: 0 when it already is, the break effort when it may be dug, BLOCKED otherwise. */
+    private static double clear(Level level, BlockPos cell, Mode mode) {
+        if (passable(level, cell)) return 0;
+        if (!mode.dig() || mode.body() == null || !(level instanceof ServerLevel server)) return BLOCKED;
+        if (mode.protect() != null && mode.protect().test(cell)) return BLOCKED;
+        BlockState state = level.getBlockState(cell);
+        if (!Hands.isNaturalTerrain(state) || !Hands.dryToBreak(server, cell)) return BLOCKED;
+        float ticks = Hands.breakTicks(mode.body(), server, cell, state);
+        if (ticks == Float.MAX_VALUE || ticks > 400) return BLOCKED;
+        return 1.0 + ticks / 10.0;
+    }
+
+    /** Where a body falling from {@code from} (an open cell once cleared) lands, within MAX_DROP blocks; null otherwise. */
+    private static @Nullable BlockPos landing(Level level, BlockPos from) {
+        for (int k = 1; k <= MAX_DROP; k++) {
+            BlockPos cell = from.below(k);
+            if (!passable(level, cell)) return null;
+            if (isWater(level, cell)) return cell;
+            if (isFloor(level, cell.below())) return cell;
+        }
+        return null;
+    }
+
+    private static boolean isHazardBelow(Level level, BlockPos dug) {
+        for (int k = 1; k <= 2; k++) {
+            if (level.getFluidState(dug.below(k)).is(FluidTags.LAVA)) return true;
+        }
+        return false;
+    }
+
+    private static double penalty(Level level, BlockPos pos) {
+        return isWater(level, pos) ? 2.0 : 0.0;
+    }
+
+    private static double heuristic(BlockPos a, BlockPos b) {
+        double dx = a.getX() - b.getX();
+        double dy = a.getY() - b.getY();
+        double dz = a.getZ() - b.getZ();
+        return Math.sqrt(dx * dx + dz * dz) + Math.abs(dy) * 0.5;
+    }
+
+    private static List<BlockPos> trace(Node node) {
+        List<BlockPos> path = new ArrayList<>();
+        for (Node n = node; n != null; n = n.parent) path.add(n.pos);
+        Collections.reverse(path);
+        return path;
+    }
+
+    /** Feet and head cells are open. */
+    public static boolean bodyFits(Level level, BlockPos feet) {
+        return passable(level, feet) && passable(level, feet.above());
+    }
+
+    /** A body can stand here: room for feet and head, and either a floor or water to swim in. */
+    public static boolean standable(Level level, BlockPos feet) {
+        if (!bodyFits(level, feet)) return false;
+        if (isWater(level, feet)) return true;
+        return isFloor(level, feet.below());
+    }
+
+    public static boolean passable(Level level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (isHazard(state)) return false;
+        if (state.getFluidState().is(FluidTags.LAVA)) return false;
+        return state.getCollisionShape(level, pos).isEmpty();
+    }
+
+    public static boolean isFloor(Level level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (isHazard(state) || state.is(Blocks.MAGMA_BLOCK) || state.is(Blocks.CACTUS)) return false;
+        VoxelShape shape = state.getCollisionShape(level, pos);
+        if (shape.isEmpty()) return false;
+        double top = shape.max(Direction.Axis.Y);
+        return top > 0.4 && top <= 1.0;
+    }
+
+    public static boolean isWater(Level level, BlockPos pos) {
+        return level.getFluidState(pos).is(FluidTags.WATER);
+    }
+
+    private static boolean isHazard(BlockState state) {
+        return state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE) || state.is(Blocks.LAVA)
+                || state.is(Blocks.SWEET_BERRY_BUSH) || state.is(Blocks.COBWEB) || state.is(Blocks.POWDER_SNOW)
+                || state.is(Blocks.WITHER_ROSE) || state.is(Blocks.CAMPFIRE) || state.is(Blocks.SOUL_CAMPFIRE);
+    }
+}

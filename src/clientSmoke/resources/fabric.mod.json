@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "voxelmind_local_clientsmoke",
+  "version": "1.0.0",
+  "name": "VoxelMind Local client smoke (dev only)",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.voxelmind.local.client.ServerSmoke"
+    ],
+    "client": [
+      "com.voxelmind.local.client.ClientSmoke"
+    ]
+  },
+  "depends": {
+    "voxelmind_local": "*"
+  }
+}

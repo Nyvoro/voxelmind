@@ -1,0 +1,10 @@
+[
+  {"wait": 4000, "chat": "/give Lysa cobblestone 64"},
+  {"wait": 500, "chat": "/give Lysa beef 3"},
+  {"wait": 500, "chat": "/give Lysa coal 4"},
+  {"wait": 500, "chat": "/give Lysa furnace 1"},
+  {"wait": 3000, "chat": "Lysa, ich hab dir Cobblestone, rohes Rindfleisch, Kohle und einen Ofen gegeben. Brat bitte zuerst das Fleisch, und dann bau uns eine kleine Huette aus Cobblestone, 5 mal 5 Bloecke, mit Tueroeffnung."},
+  {"wait": 240000, "inventory": true},
+  {"wait": 1000, "chat": "/vml list"},
+  {"wait": 2000}
+]

@@ -1,0 +1,187 @@
+// Central Stonecutter script: applied once per target (versions/<mc>).
+// Per-target values come from versions/<mc>/gradle.properties, shared metadata
+// from the root gradle.properties. See docs/VERSIONS.md.
+
+plugins {
+    id "fabric-loom" version "1.15.5" apply false
+    id "net.fabricmc.fabric-loom" version "1.15.5" apply false
+    id "dev.kikugie.stonecutter"
+    id "java"
+}
+
+version = "${project.mod_version}+${project.minecraft_version}"
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    maven { url "https://maven.fabricmc.net/" }
+    mavenCentral()
+}
+
+// minecraft_version as a comparable (major, minor, patch) triple: 1.21 -> [1,21,0], 26.1.2 -> [26,1,2].
+def mcParts = project.minecraft_version.split("\\.").collect { it.toInteger() }
+while (mcParts.size() < 3) mcParts << 0
+def mcAtLeast = { int major, int minor, int patch = 0 ->
+    if (mcParts[0] != major) return mcParts[0] > major
+    if (mcParts[1] != minor) return mcParts[1] > minor
+    return mcParts[2] >= patch
+}
+
+// 26.x ships unobfuscated, 1.21.x needs Mojang mappings (separate Loom plugin id).
+def unobfuscated = mcAtLeast(26, 1)
+apply plugin: unobfuscated ? "net.fabricmc.fabric-loom" : "fabric-loom"
+
+// Stonecutter rewrites //? comment blocks in src/ when the active project is
+// switched. Pure renames (same concept, different Java name) are applied per
+// target by the prepare*Sources tasks into build/ instead, so the checked-in
+// source stays in the 26.2 names. Pitfall: if the source path below is wrong
+// the jar is silently ~475 bytes; tools/build-all.sh checks size + content.
+sourceSets {
+    main {
+        java.srcDirs = [layout.buildDirectory.dir("versionedSources")]
+        resources.srcDirs = [file("${rootDir}/src/main/resources")]
+    }
+    // Dev-only client run that drives the real screens and a companion (never packaged).
+    clientSmoke {
+        java.srcDirs = [layout.buildDirectory.dir("versionedClientSmoke")]
+        resources.srcDirs = [file("${rootDir}/src/clientSmoke/resources")]
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+apply from: file("${rootDir}/tools/versioned-renames.gradle")
+
+// Copies a source tree and applies the per-target renames line by line.
+def registerVersionedSync = { String taskName, File fromDir, Object intoDir ->
+    tasks.register(taskName, Sync) {
+        from fromDir
+        into intoDir
+        inputs.property "minecraft_version", project.minecraft_version
+        inputs.file file("${rootDir}/tools/versioned-renames.gradle")
+        def renames = versionedRenames(mcParts)
+        filter { String line ->
+            renames.each { String from, String to ->
+                line = from.startsWith("re:") ? line.replaceAll(from.substring(3), to) : line.replace(from, to)
+            }
+            return line
+        }
+    }
+}
+registerVersionedSync("prepareVersionedSources", file("${rootDir}/src/main/java"), layout.buildDirectory.dir("versionedSources"))
+registerVersionedSync("prepareVersionedClientSmoke", file("${rootDir}/src/clientSmoke/java"), layout.buildDirectory.dir("versionedClientSmoke"))
+tasks.named("compileJava") { dependsOn tasks.named("prepareVersionedSources") }
+tasks.named("compileClientSmokeJava") { dependsOn tasks.named("prepareVersionedClientSmoke") }
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    if (unobfuscated) {
+        implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+        implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    } else {
+        mappings loom.officialMojangMappings()
+        // Minecraft 1.21.x does not ship the nullness annotations the source uses (26.x does).
+        compileOnly "org.jspecify:jspecify:1.0.0"
+        modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+        modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    }
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "loader_version", project.loader_version
+    inputs.property "java_version", project.java_version
+    inputs.property "fabric_version", project.fabric_version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version, "minecraft_version": project.minecraft_version,
+                "loader_version": project.loader_version, "java_version": project.java_version,
+                "fabric_version": project.fabric_version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = Integer.parseInt(project.java_version)
+    options.encoding = "UTF-8"
+    options.compilerArgs += ["-Xmaxerrs", "500"]
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(Integer.parseInt(project.java_version))
+}
+
+tasks.withType(JavaExec).configureEach {
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(Integer.parseInt(project.java_version))
+    }
+}
+
+jar {
+    from(rootProject.file("LICENSE")) {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+// Dev runs: the 26.2 dev server keeps using <root>/run (port 25599, owner-bot scenarios in
+// tools/e2e); every other target gets versions/<mc>/run. The client smoke run lives under build/.
+loom {
+    mods {
+        "voxelmind_local_clientsmoke" { sourceSet sourceSets.clientSmoke }
+    }
+    runs {
+        configureEach {
+            if (it.name == "server" && project.minecraft_version == "26.2") it.runDir("../../run")
+        }
+        clientSmoke {
+            client()
+            name = "VoxelMind Local client smoke"
+            source sourceSets.clientSmoke
+            runDir "../../build/client-smoke/${project.minecraft_version}/run"
+            // Opens the world tools/smoke-client.sh copied to saves/smoke straight away.
+            programArgs "--quickPlaySingleplayer", "smoke"
+            ideConfigGenerated false
+        }
+    }
+}
+
+// Game tests (36 server tests + the client test) run on 1.21.11 and the 26.x targets. Older
+// targets differ in the GameTestHelper signatures (Component messages) and, below 1.21.5, in the
+// test registration itself; the smoke scripts cover those instead (docs/VERSIONS.md).
+if (mcAtLeast(1, 21, 11)) {
+    // The long client test uses client gametest API that only Fabric API for 26.2 has.
+    def clientGameTest = project.minecraft_version == "26.2"
+    fabricApi {
+        configureTests {
+            createSourceSet = true
+            modId = "voxelmind_local_test"
+            enableGameTests = true
+            enableClientGameTests = clientGameTest
+            eula = true
+        }
+    }
+
+    registerVersionedSync("prepareVersionedGametest", file("${rootDir}/src/gametest/java"), layout.buildDirectory.dir("versionedGametest"))
+    if (!clientGameTest) tasks.named("prepareVersionedGametest") { exclude "**/SingleplayerClientTest.java" }
+    sourceSets {
+        gametest {
+            java.srcDirs = [layout.buildDirectory.dir("versionedGametest")]
+            resources.srcDirs = [file("${rootDir}/src/gametest/resources")]
+        }
+    }
+    tasks.named("compileGametestJava") { dependsOn tasks.named("prepareVersionedGametest") }
+
+    tasks.named("runGameTest") {
+        if (project.hasProperty("trace")) jvmArgs "-Dvml.trace=true"
+    }
+    // -PvoxelmindApi=http://127.0.0.1:8797/v1 points the dev runs and tests at a local `wrangler dev` worker.
+    tasks.matching { it.name in ["runServer", "runClient", "runGameTest", "runClientGameTest"] }.configureEach {
+        if (project.hasProperty("voxelmindApi")) jvmArgs "-Dvoxelmind.api=${project.property("voxelmindApi")}"
+    }
+}
+
+// Build order: "Set active project to <mc>", :<mc>:assemble, "Reset active project" (tools/build-all.sh).
+// JAR: versions/<mc>/build/libs/voxelmind-local-<modver>+<mc>.jar

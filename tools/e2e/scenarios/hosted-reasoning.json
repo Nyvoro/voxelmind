@@ -1,0 +1,9 @@
+[
+ {"wait": 4000, "chat": "/vml summon Zeus"},
+ {"wait": 40000, "chat": "Zeus, I am bored. Give me a small challenge, nothing deadly please."},
+ {"wait": 50000, "chat": "/vml dismiss Zeus"},
+ {"wait": 3000, "chat": "/vml summon Fee"},
+ {"wait": 10000, "chat": "Fee, put a 5 by 5 oak plank floor right in front of me"},
+ {"wait": 30000, "chat": "/vml dismiss Fee"},
+ {"wait": 3000}
+]

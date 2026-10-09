@@ -1,0 +1,10 @@
+[
+  { "wait": 4000, "chat": "/vml builder Fee" },
+  { "wait": 12000, "chat": "Fee, build me a small cozy stone hut with a wooden door right in front of me" },
+  { "wait": 75000, "chat": "Fee, thanks! Now please undo the hut again" },
+  { "wait": 30000, "chat": "/vml dismiss Fee" },
+  { "wait": 3000, "chat": "/vml god Zeus" },
+  { "wait": 40000, "chat": "Zeus, I am bored. Give me a small challenge, nothing deadly please." },
+  { "wait": 60000, "chat": "/vml dismiss Zeus" },
+  { "wait": 4000 }
+]

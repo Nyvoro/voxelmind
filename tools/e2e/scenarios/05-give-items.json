@@ -1,0 +1,11 @@
+[
+  {"wait": 2000, "chat": "/vml summon Lysa"},
+  {"wait": 1500, "chat": "/clear Lysa"},
+  {"wait": 500, "chat": "/give Lysa bread 5"},
+  {"wait": 500, "chat": "/give Lysa apple 4"},
+  {"wait": 3000, "chat": "Lysa, gib mir bitte 3 Brot."},
+  {"wait": 30000, "inventory": true},
+  {"wait": 2000, "chat": "Und jetzt bitte noch 2 Aepfel."},
+  {"wait": 30000, "inventory": true},
+  {"wait": 1000}
+]

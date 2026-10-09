@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.voxelmind.local.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "PlayerListRespawnMixin",
+    "SleepStatusMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

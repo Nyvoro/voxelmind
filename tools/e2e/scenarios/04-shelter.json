@@ -1,0 +1,10 @@
+[
+  {"wait": 2000, "chat": "/time set 1000"},
+  {"wait": 500, "chat": "/spreadplayers 60 40 0 3 false VmlOwner"},
+  {"wait": 1500, "chat": "/vml summon Lysa"},
+  {"wait": 1500, "chat": "/clear Lysa"},
+  {"wait": 500, "chat": "/give Lysa oak_planks 64"},
+  {"wait": 3000, "chat": "Lysa, ich hab dir Holzbretter gegeben. Bau uns bitte eine kleine Huette hier in der Naehe, ich warte hier."},
+  {"wait": 150000, "chat": "/vml list"},
+  {"wait": 3000}
+]
