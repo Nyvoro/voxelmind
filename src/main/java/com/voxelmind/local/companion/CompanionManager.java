@@ -156,9 +156,7 @@ public final class CompanionManager {
     public void save() {
         try {
             for (Companion c : companions.values()) {
-                Path target = dirFor(c.state);
-                Files.createDirectories(target);
-                Files.writeString(target.resolve(c.state.id + ".json"), GSON.toJson(c.state), StandardCharsets.UTF_8);
+                com.voxelmind.local.config.LocalConfig.writeAtomically(dirFor(c.state).resolve(c.state.id + ".json"), GSON.toJson(c.state));
             }
             dirty = false;
             lastSave = System.currentTimeMillis();
@@ -221,6 +219,13 @@ public final class CompanionManager {
             return c.name() + " fell in hardcore mode and cannot come back. Its memories stay in the menu; /vml forget "
                     + c.name() + " deletes it.";
         }
+        if (wanted.equals("companion") && !mayHost(owner) && (c == null || c.body() == null || c.body().isRemoved())) {
+            int max = com.voxelmind.local.config.LocalConfig.get().maxCompanionsPerPlayer;
+            long here = ownedBy(owner.getUUID()).stream().filter(o -> o.body() != null && !o.body().isRemoved()).count();
+            if (max > 0 && here >= max) {
+                return "On this server each player can have " + max + " companions in the world at once. Send one away first with /vml dismiss <name>.";
+            }
+        }
         if (c == null) {
             ServerPlayer clash = server.getPlayerList().getPlayerByName(name);
             if (clash != null) return "A player named " + name + " is already online.";
@@ -257,13 +262,13 @@ public final class CompanionManager {
         if (c.body() != null && !c.body().isRemoved()) {
             CompanionPlayer body = c.body();
             BlockPos spot = spotNear(owner);
-            if (spot != null && body.level() == owner.level()) {
-                body.teleportTo(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5);
+            if (spot != null) {
+                Compat.teleport(body, Compat.level(owner), spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, body.getYRot());
                 c.event("presence", "your owner called you; you appeared next to them at (" + spot.getX() + "," + spot.getY() + "," + spot.getZ() + ")", false, null);
                 c.mind.wake("summoned by your owner", true, true, 300);
                 return name + " is here.";
             }
-            return name + " is already in the world but cannot reach you here.";
+            return "There is no free spot next to you for " + name + ".";
         }
         String error = spawnBody(c, owner);
         save();
@@ -286,6 +291,11 @@ public final class CompanionManager {
         body.snapTo(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, owner.getYRot() + 180f, 0f);
         server.getPlayerList().placeNewPlayer(new CompanionConnection(), body, CommonListenerCookie.createInitial(profile, false));
         Compat.acceptPlayerLoad(body);
+        // Before 1.21.9 placeNewPlayer puts a player where its saved data says (or at the world spawn); the body
+        // belongs next to its owner, in the owner's dimension.
+        if (Compat.level(body) != level || body.blockPosition().distSqr(spot) > 2) {
+            Compat.teleport(body, level, spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, owner.getYRot() + 180f);
+        }
         if (!hasData) body.setGameMode(GameType.SURVIVAL);
         if (body.isDeadOrDying()) body.setHealth(body.getMaxHealth());
         c.attach(body);
@@ -316,13 +326,18 @@ public final class CompanionManager {
 
     /** Once per player and session: which of the beings here are AI and who brought them. */
     private void tellAboutAi(ServerPlayer player) {
-        List<String> beings = new ArrayList<>();
+        var beings = Component.empty();
+        int count = 0;
         for (Companion c : companions.values()) {
-            if (c.present()) beings.add(c.name() + " (" + c.state.kind + " of " + c.state.ownerName + ")");
+            if (!c.present()) continue;
+            String kind = c.state.kind == null ? "companion" : c.state.kind;
+            if (count++ > 0) beings.append(", ");
+            beings.append(Component.translatableWithFallback("voxelmind_local.notice.ai_being", "%s (%s of %s)", c.name(),
+                    Component.translatableWithFallback("voxelmind_local.notice.ai_kind." + kind, kind), c.state.ownerName));
         }
-        if (beings.isEmpty() || !toldAboutAi.add(player.getUUID())) return;
-        player.sendSystemMessage(Component.literal("[VoxelMind] AI characters in this world, controlled by an AI model: " + String.join(", ", beings) + ".")
-                .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
+        if (count == 0 || !toldAboutAi.add(player.getUUID())) return;
+        player.sendSystemMessage(Component.literal("[VoxelMind] ").append(Component.translatableWithFallback("voxelmind_local.notice.ai_label",
+                "AI characters in this world, controlled by an AI model: %s.", beings)).withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
     }
 
     /** A hardcore companion that died: its body leaves the world for good; state and memories stay until deleted. */
@@ -479,11 +494,20 @@ public final class CompanionManager {
         if (player instanceof CompanionPlayer) return;
         server.execute(() -> tellAboutAi(player));
         if (ownedBy(player.getUUID()).isEmpty() && hinted.add(player.getUUID())) {
-            var message = Component.literal("[VoxelMind Local] Bring an AI companion into this world: /vml summon <Name> [character]. "
-                    + "Talk to it in normal chat.").withStyle(ChatFormatting.GOLD);
+            var message = Component.literal("[VoxelMind] ").withStyle(ChatFormatting.GOLD)
+                    .append(Component.translatableWithFallback("voxelmind_local.notice.join",
+                            "Press V (or type /vml) to bring an AI companion, a Builder or a God into this world. Talk to them in normal chat.")
+                            .withStyle(ChatFormatting.GOLD));
             if (!com.voxelmind.local.config.LocalConfig.get().hasCredentials()) {
-                message.append(" First connect an AI: free with a Player2 account, VoxelMind Sparks (sign in with your Minecraft account, welcome Sparks included), your own OpenRouter account, or a local Ollama: ")
-                        .append(com.voxelmind.local.command.VmlCommand.settingsLink());
+                if (server.isSingleplayerOwner(new NameAndId(player.getUUID(), player.getGameProfile().name()))) {
+                    message.append(" ").append(Component.translatableWithFallback("voxelmind_local.notice.join.no_ai",
+                                    "First choose how they think: VoxelMind Sparks (sign in with your Minecraft account, welcome Sparks included), Player2, your OpenRouter account or a local model:")
+                                    .withStyle(ChatFormatting.GOLD))
+                            .append(" ").append(com.voxelmind.local.command.VmlCommand.settingsLink());
+                } else {
+                    message.append(" ").append(Component.translatableWithFallback("voxelmind_local.notice.join.no_ai_server",
+                            "This world has no AI connected yet; its host or an operator connects one (/vml setup).").withStyle(ChatFormatting.GOLD));
+                }
             }
             player.sendSystemMessage(message);
         }

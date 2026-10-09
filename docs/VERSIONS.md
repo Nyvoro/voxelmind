@@ -13,35 +13,35 @@ version, on Fabric API and on the Fabric loader listed below. Minecraft 1.21.x r
 
 | Minecraft | Java | Fabric loader (min) | Fabric API (min) | Mappings | Jar |
 |---|---|---|---|---|---|
-| 1.21 | 21 | 0.19.5 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.jar` |
-| 1.21.1 | 21 | 0.16.9 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.1.jar` |
-| 1.21.2 | 21 | 0.19.5 | 0.106.1+1.21.2 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.2.jar` |
-| 1.21.3 | 21 | 0.19.5 | 0.114.1+1.21.3 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.3.jar` |
-| 1.21.4 | 21 | 0.16.9 | 0.113.0+1.21.4 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.4.jar` |
-| 1.21.5 | 21 | 0.16.10 | 0.119.5+1.21.5 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.5.jar` |
-| 1.21.6 | 21 | 0.16.13 | 0.128.2+1.21.6 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.6.jar` |
-| 1.21.7 | 21 | 0.19.5 | 0.129.0+1.21.7 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.7.jar` |
-| 1.21.8 | 21 | 0.16.13 | 0.136.1+1.21.8 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.8.jar` |
-| 1.21.9 | 21 | 0.19.5 | 0.134.1+1.21.9 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.9.jar` |
-| 1.21.10 | 21 | 0.19.5 | 0.138.4+1.21.10 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.10.jar` |
-| 1.21.11 | 21 | 0.19.5 | 0.141.6+1.21.11 | Mojang, remapped | `voxelmind-local-0.4.0+1.21.11.jar` |
-| 26.1 | 25 | 0.19.5 | 0.145.1+26.1 | none (unobfuscated) | `voxelmind-local-0.4.0+26.1.jar` |
-| 26.1.1 | 25 | 0.19.5 | 0.145.4+26.1.1 | none (unobfuscated) | `voxelmind-local-0.4.0+26.1.1.jar` |
-| 26.1.2 | 25 | 0.19.5 | 0.155.2+26.1.2 | none (unobfuscated) | `voxelmind-local-0.4.0+26.1.2.jar` |
-| 26.2 | 25 | 0.19.5 | 0.159.0+26.2 | none (unobfuscated) | `voxelmind-local-0.4.0+26.2.jar` |
+| 1.21 | 21 | 0.19.5 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.jar` |
+| 1.21.1 | 21 | 0.16.9 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.1.jar` |
+| 1.21.2 | 21 | 0.19.5 | 0.106.1+1.21.2 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.2.jar` |
+| 1.21.3 | 21 | 0.19.5 | 0.114.1+1.21.3 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.3.jar` |
+| 1.21.4 | 21 | 0.16.9 | 0.113.0+1.21.4 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.4.jar` |
+| 1.21.5 | 21 | 0.16.10 | 0.119.5+1.21.5 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.5.jar` |
+| 1.21.6 | 21 | 0.16.13 | 0.128.2+1.21.6 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.6.jar` |
+| 1.21.7 | 21 | 0.19.5 | 0.129.0+1.21.7 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.7.jar` |
+| 1.21.8 | 21 | 0.16.13 | 0.136.1+1.21.8 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.8.jar` |
+| 1.21.9 | 21 | 0.19.5 | 0.134.1+1.21.9 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.9.jar` |
+| 1.21.10 | 21 | 0.19.5 | 0.138.4+1.21.10 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.10.jar` |
+| 1.21.11 | 21 | 0.19.5 | 0.141.6+1.21.11 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.11.jar` |
+| 26.1 | 25 | 0.19.5 | 0.145.1+26.1 | none (unobfuscated) | `voxelmind-local-0.4.1+26.1.jar` |
+| 26.1.1 | 25 | 0.19.5 | 0.145.4+26.1.1 | none (unobfuscated) | `voxelmind-local-0.4.1+26.1.1.jar` |
+| 26.1.2 | 25 | 0.19.5 | 0.155.2+26.1.2 | none (unobfuscated) | `voxelmind-local-0.4.1+26.1.2.jar` |
+| 26.2 | 25 | 0.19.5 | 0.159.0+26.2 | none (unobfuscated) | `voxelmind-local-0.4.1+26.2.jar` |
 
 The Fabric API / loader versions are the ones of `voxelmind-mod/versions/*/gradle.properties`
 (Minecraft 1.21 uses the Fabric API build `0.116.12+1.21.1`, which also runs on 1.21). The mod is
 "client and server": it runs in the integrated or a dedicated server, so dedicated servers need Fabric API too.
 
-Verification status of this 0.4.0 port (details below):
+Verification status of 0.4.1 (09.10.2026; details below):
 
 | Check | 1.21 .. 1.21.10 | 1.21.11 | 26.1, 26.1.1, 26.1.2 | 26.2 |
 |---|---|---|---|---|
 | Release jar builds, metadata checked (`tools/build-all.sh`) | yes | yes | yes | yes |
 | Production dedicated-server boot, remapped jar (`tools/smoke-servers.sh`) | yes | yes | yes | yes |
-| Client smoke: every screen + real body actions (`tools/smoke-client.sh`) | yes | yes | yes | yes |
-| 36 server game tests (`runGameTest`) | not available | yes | yes | yes |
+| Client smoke: every screen, real body actions, summon after the owner went 300 blocks away (`tools/smoke-client.sh`) | 1.21.1 and 1.21.8 run for 0.4.1 (all in 0.4.0) | yes | 0.4.0 only | yes |
+| 38 server game tests (`runGameTest`) | not available | yes | 0.4.0 only (36 then) | yes |
 | Long client game test (`runClientGameTest`) | not available | not available | not available | yes |
 
 ## Build commands
@@ -55,14 +55,14 @@ export GRADLE_USER_HOME=V:/Android/Gradle
 
 # one target (the active Stonecutter project decides which comment blocks of src/ are live)
 ./gradlew "Set active project to 1.21.1"
-./gradlew :1.21.1:assemble          # jar: versions/1.21.1/build/libs/voxelmind-local-0.4.0+1.21.1.jar
+./gradlew :1.21.1:assemble          # jar: versions/1.21.1/build/libs/voxelmind-local-0.4.1+1.21.1.jar
 ./gradlew "Reset active project"    # back to 26.2 - always do this before you edit or commit
 
 # all 16 targets, checked, copied to dist/ (6 minutes with a warm daemon)
 bash tools/build-all.sh                      # or: bash tools/build-all.sh 1.21.1 26.2
 
 # 26.2 tests (26.2 is the default active project)
-./gradlew :26.2:runGameTest                  # 36 server game tests
+./gradlew :26.2:runGameTest                  # 38 server game tests
 ./gradlew :26.2:runClientGameTest            # the long client test with screenshots
 ./gradlew :26.2:runServer                    # dev server in voxelmind-local/run (port 25599, owner-bot scenarios)
 ./gradlew :26.2:build                        # jar + game tests
@@ -138,7 +138,7 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
   The `VML-SMOKE body ...` lines are written to `build/client-smoke/<mc>/smoke-lines.txt`; apart from coordinates they are
   identical on all 16 versions. A render error would crash the client and fail the run. With `SMOKE_SHOTS=1` it also photographs
   each screen for visual comparison against 26.2.
-- **26.2 game tests**: `runGameTest` (36 server tests: body, tools, settings, hosted minds) and `runClientGameTest`
+- **26.2 game tests**: `runGameTest` (38 server tests: body, tools, settings, hosted minds) and `runClientGameTest`
   (one long client test with screenshots) - must stay green; they also run for 1.21.11 and 26.1 / 26.1.1 / 26.1.2
   (server tests). Older targets differ in `GameTestHelper` (Component messages instead of Strings from 1.21.11) and, below
   1.21.5, in how tests are registered; the client smoke covers the same body actions there.
@@ -171,5 +171,5 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
 
 ```bash
 cd voxelmind-werkstatt/ops
-node curseforge-release.mjs --surface local --version 0.4.0 --changelog ../../voxelmind-local/CHANGELOG.md --release-type beta --dry-run
+node curseforge-release.mjs --surface local --version 0.4.1 --changelog ../../voxelmind-local/CHANGELOG.md --dry-run   # beta is the default of this surface until 08.11.
 ```

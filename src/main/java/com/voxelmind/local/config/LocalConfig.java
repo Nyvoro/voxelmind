@@ -17,8 +17,13 @@ import java.nio.file.Path;
 public final class LocalConfig {
     public static final String OPENROUTER_URL = "https://openrouter.ai/api/v1";
     public static final String DEFAULT_MODEL = "deepseek/deepseek-v4-flash-0731";
-    /** Measured on 07.10.2026 for {@link #DEFAULT_MODEL}; other models keep OpenRouter's own routing. */
-    public static final java.util.List<String> DEFAULT_PROVIDER_ORDER = java.util.List.of("StreamLake", "Together", "Wafer");
+    /**
+     * Providers tried one after another for {@link #DEFAULT_MODEL}: the US providers with zero data retention the
+     * VoxelMind API uses, measured on 08.10.2026 (Relace about $0.17/h, Sail Research $0.10-0.15/h, Together as
+     * the last resort). Other models keep OpenRouter's own routing.
+     */
+    public static final java.util.List<String> DEFAULT_PROVIDER_ORDER = java.util.List.of("Relace", "Sail Research", "Together");
+    private static final java.util.List<String> OLD_DEFAULT_PROVIDER_ORDER = java.util.List.of("StreamLake", "Together", "Wafer");
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static volatile LocalConfig current = new LocalConfig();
@@ -31,10 +36,15 @@ public final class LocalConfig {
     public String player2Key = "";
     /** VoxelMind API token from the Minecraft sign-in; only ever sent to the VoxelMind API. */
     public String voxelmindKey = "";
+    /** Minecraft name of the Sparks account behind {@link #voxelmindKey}: the world spends its Sparks, links name it. */
+    public String voxelmindName = "";
     /** Game Client ID from the Player2 Developer Dashboard; empty uses the one built into the mod. */
     public String player2ClientId = "";
-    /** OpenAI-compatible base URL. OpenRouter by default; e.g. http://localhost:11434/v1 for Ollama. */
-    public String baseUrl = OPENROUTER_URL;
+    /**
+     * OpenAI-compatible base URL, e.g. http://localhost:11434/v1 for Ollama. A new config starts on VoxelMind Sparks:
+     * one sign-in with the Minecraft account, welcome Sparks included, nothing else to set up.
+     */
+    public String baseUrl = com.voxelmind.local.provider.VoxelMindApi.BASE;
     public String model = DEFAULT_MODEL;
     /** Model that rewrites long-term memory; empty uses {@link #model}. */
     public String memoryModel = "";
@@ -47,11 +57,18 @@ public final class LocalConfig {
     public java.util.List<String> providerOrder = new java.util.ArrayList<>(DEFAULT_PROVIDER_ORDER);
     /** Technical cost limit across all companions on this server. */
     public int maxRequestsPerMinute = 20;
+    /** Companion bodies one player may have in the world at once; the singleplayer host and operators have no limit. 0 = none. */
+    public int maxCompanionsPerPlayer = 3;
     /** Fallback speech language when the conversation gives no clue, e.g. "de" or "en". "auto" leaves it to the conversation. */
     public String language = "auto";
     /** Randomised quiet-time wake while the owner is near and the body is idle. 0 disables it. */
     public int idleWakeMinSeconds = 45;
     public int idleWakeMaxSeconds = 240;
+    /**
+     * The quiet-time timer (and a God's idle turn) only runs while the owner did something in the game within
+     * this many minutes: an owner away from the keyboard costs no Sparks or credit. Real events still wake. 0 = off.
+     */
+    public int idleOwnerAwayMinutes = 5;
     /** Blocks within which a companion hears public chat. */
     public int hearingRange = 48;
     /** Also write full prompts into the world's voxelmind-local/logs (local debugging only). */
@@ -72,19 +89,50 @@ public final class LocalConfig {
             try {
                 loaded = GSON.fromJson(Files.readString(path, StandardCharsets.UTF_8), LocalConfig.class);
             } catch (Exception e) {
-                VoxelMindLocal.LOG.error("Could not read {}; keeping defaults", path, e);
+                // Keys and sign-ins live in this file: keep it aside instead of overwriting it with defaults.
+                Path aside = path.resolveSibling(path.getFileName() + ".broken-" + System.currentTimeMillis());
+                VoxelMindLocal.LOG.error("Could not read {}; it is kept as {} and the defaults are used", path, aside.getFileName(), e);
+                try {
+                    Files.move(path, aside);
+                } catch (IOException moveError) {
+                    VoxelMindLocal.LOG.error("Could not keep {} aside", path, moveError);
+                    current = new LocalConfig();
+                    return;
+                }
             }
         }
         current = loaded != null ? loaded : new LocalConfig();
+        migrate(current);
         save();
+    }
+
+    /**
+     * Earlier versions wrote the provider order measured for the default model into every config; that
+     * order started at a provider outside the zero-data-retention set the VoxelMind API uses.
+     */
+    private static void migrate(LocalConfig config) {
+        if (config.providerOrder != null && config.providerOrder.equals(OLD_DEFAULT_PROVIDER_ORDER)) {
+            config.providerOrder = new java.util.ArrayList<>(DEFAULT_PROVIDER_ORDER);
+        }
     }
 
     public static synchronized void save() {
         try {
-            Files.createDirectories(path().getParent());
-            Files.writeString(path(), GSON.toJson(current), StandardCharsets.UTF_8);
+            writeAtomically(path(), GSON.toJson(current));
         } catch (IOException e) {
             VoxelMindLocal.LOG.error("Could not write {}", path(), e);
+        }
+    }
+
+    /** Writes a file whole or not at all: a crash or a full disk mid-write leaves the previous version. */
+    public static void writeAtomically(Path target, String text) throws IOException {
+        Files.createDirectories(target.getParent());
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        Files.writeString(tmp, text, StandardCharsets.UTF_8);
+        try {
+            Files.move(tmp, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+            Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -107,7 +155,21 @@ public final class LocalConfig {
     }
 
     public boolean isOpenRouter() {
-        return baseUrl != null && baseUrl.contains("openrouter.ai");
+        return isHost(baseUrl, "openrouter.ai");
+    }
+
+    /**
+     * Whether an endpoint URL is https on exactly this host. Stored keys and tokens only ever go to their own
+     * service, so a lookalike such as openrouter.ai.example.net is just another custom endpoint.
+     */
+    public static boolean isHost(@org.jspecify.annotations.Nullable String url, String host) {
+        if (url == null) return false;
+        try {
+            java.net.URI uri = java.net.URI.create(url.trim());
+            return "https".equalsIgnoreCase(uri.getScheme()) && host.equalsIgnoreCase(uri.getHost());
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     public boolean isPlayer2() {

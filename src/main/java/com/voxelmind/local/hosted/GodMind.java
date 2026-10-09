@@ -111,6 +111,8 @@ public final class GodMind extends HostedMind {
         c.event("note", "cleanup at the end: " + cleaned, false, null);
     }
 
+    private long lastFireReport;
+
     @Override
     protected void tickWorld(MinecraftServer server) {
         Iterator<Map.Entry<UUID, Move>> it = moves.entrySet().iterator();
@@ -134,8 +136,10 @@ public final class GodMind extends HostedMind {
                         + ", target " + fmt(m.target) + ", distance " + String.format(Locale.ROOT, "%.1f", m.mob.position().distanceTo(m.target)), ok);
             }
         }
-        Map<String, Integer> fired = rules.drainFires();
-        if (!fired.isEmpty()) {
+        // Condensed: the counts of the last 5 seconds in one row per rule (a rule may fire every tick).
+        if (now - lastFireReport >= 100) {
+            lastFireReport = now;
+            Map<String, Integer> fired = rules.drainFires();
             fired.forEach((label, count) -> c.event("event", "rule \"" + label + "\" fired " + count + "×", false, null));
         }
     }
@@ -283,6 +287,7 @@ public final class GodMind extends HostedMind {
         int ttl = (int) num(args, "ttl_seconds", 300);
         String error = rules.add(label, str(args, "when"), str(args, "filter"), then, ttl);
         if (error != null) return new Outcome("refused rule \"" + label + "\": " + error, false, false);
+        for (String command : then) resets.before(server(), command);
         return new Outcome("result of \"rule " + label + "\": in force on " + str(args, "when") + " for " + Math.max(5, Math.min(1800, ttl)) + "s", true, false);
     }
 

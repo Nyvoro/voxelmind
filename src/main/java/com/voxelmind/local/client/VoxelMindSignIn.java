@@ -27,7 +27,7 @@ public final class VoxelMindSignIn {
             return serverId;
         })).thenCompose(serverId -> VoxelMindApi.finishLogin(user.getName(), serverId))
                 .thenApply(login -> {
-                    VoxelMindApi.adopt(login.token());
+                    VoxelMindApi.adopt(login.token(), login.name());
                     return login;
                 });
     }

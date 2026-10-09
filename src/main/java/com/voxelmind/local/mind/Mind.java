@@ -86,7 +86,7 @@ public final class Mind {
         }
         if (config.idleWakeMaxSeconds > 0 && now >= nextIdleAt) {
             scheduleIdle();
-            if (ownerNear() && !actionInFlight && !speechInFlight && reasons.isEmpty()) {
+            if (ownerNear() && ownerActive(c.owner()) && !actionInFlight && !speechInFlight && reasons.isEmpty()) {
                 reasons.add("a quiet moment (timer)");
                 wantAction = !c.actionRunning() && waitUntil == 0;
                 wantSpeech = true;
@@ -101,6 +101,12 @@ public final class Mind {
         CompanionPlayer body = c.body();
         ServerPlayer owner = c.owner();
         return body != null && owner != null && owner.level() == body.level() && owner.distanceTo(body) <= 48;
+    }
+
+    /** Whether the owner acted in the game recently (a technical cost guard for timer wakes, not for real events). */
+    public static boolean ownerActive(@org.jspecify.annotations.Nullable ServerPlayer owner) {
+        int minutes = LocalConfig.get().idleOwnerAwayMinutes;
+        return owner != null && (minutes <= 0 || net.minecraft.util.Util.getMillis() - owner.getLastActionTime() < minutes * 60_000L);
     }
 
     private void scheduleIdle() {
@@ -118,19 +124,22 @@ public final class Mind {
         if (!LocalConfig.get().hasCredentials()) {
             if (now - lastNoticeAt > 120_000) {
                 lastNoticeAt = now;
-                c.notifyOwner(c.name() + " has no AI model connected yet. Sign in with OpenRouter or add a key:", true);
+                c.notifyOwner(com.voxelmind.local.command.VmlCommand.noAiNotice(c.name()));
             }
             clearWants();
             return;
         }
         String wokeBy = String.join("; ", reasons);
         boolean launched = false;
+        // Both lanes of one wake see the same facts: perceive once (the block scan is the costly part of a tick).
+        String context = null;
         if (wantAction && !actionInFlight) {
             if (!LlmClient.tryAcquireBudget()) {
                 dueAt = now + 1500;
                 return;
             }
-            startAction(server, wokeBy);
+            context = PromptBuilder.context(c, wokeBy);
+            startAction(server, wokeBy, context);
             wantAction = false;
             launched = true;
         }
@@ -139,7 +148,7 @@ public final class Mind {
                 dueAt = now + 1500;
                 return;
             }
-            startSpeech(server, wokeBy);
+            startSpeech(server, wokeBy, context != null ? context : PromptBuilder.context(c, wokeBy));
             wantSpeech = false;
             launched = true;
         }
@@ -171,8 +180,8 @@ public final class Mind {
         return messages;
     }
 
-    private void startAction(MinecraftServer server, String wokeBy) {
-        PromptBuilder.Prompt prompt = PromptBuilder.action(c, wokeBy);
+    private void startAction(MinecraftServer server, String wokeBy, String context) {
+        PromptBuilder.Prompt prompt = PromptBuilder.action(c, context);
         int id = ++actionRequest;
         actionInFlight = true;
         LocalConfig config = LocalConfig.get();
@@ -181,8 +190,8 @@ public final class Mind {
                 .whenComplete((response, error) -> server.execute(() -> onAction(id, wokeBy, prompt, response, error)));
     }
 
-    private void startSpeech(MinecraftServer server, String wokeBy) {
-        PromptBuilder.Prompt prompt = PromptBuilder.speech(c, wokeBy);
+    private void startSpeech(MinecraftServer server, String wokeBy, String context) {
+        PromptBuilder.Prompt prompt = PromptBuilder.speech(c, context);
         int id = ++speechRequest;
         speechInFlight = true;
         LocalConfig config = LocalConfig.get();
@@ -318,6 +327,8 @@ public final class Mind {
             entry.addProperty("prompt_tokens", response.promptTokens());
             entry.addProperty("completion_tokens", response.completionTokens());
             entry.addProperty("cost_usd", response.cost());
+            entry.addProperty("cached_tokens", response.cachedTokens());
+            if (response.provider() != null) entry.addProperty("provider", response.provider());
         }
         if (error != null) entry.addProperty("error", (error.getCause() != null ? error.getCause() : error).toString());
         log.write(entry);

@@ -54,7 +54,7 @@ public final class Player2 {
     private Player2() {}
 
     public static boolean isPlayer2(@Nullable String baseUrl) {
-        return baseUrl != null && baseUrl.contains("player2.game");
+        return com.voxelmind.local.config.LocalConfig.isHost(baseUrl, "api.player2.game");
     }
 
     /** player2-game-key: the Client ID, which is how Player2 attributes play time to this mod (as its own engine does). */
@@ -187,7 +187,7 @@ public final class Player2 {
                 .GET()
                 .build();
         return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(r -> {
-            if (r.statusCode() == 401) throw new IllegalStateException("Player2 does not accept this sign-in any more");
+            if (r.statusCode() == 401) throw new Rejected("Player2 does not accept this sign-in any more");
             JsonObject root = object(r.body());
             if (r.statusCode() / 100 != 2 || root == null) throw new IllegalStateException(error(r.statusCode(), r.body()));
             long joules = root.has("joules") ? root.get("joules").getAsLong() : 0;

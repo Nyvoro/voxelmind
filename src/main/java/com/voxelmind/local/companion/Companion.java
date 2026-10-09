@@ -323,7 +323,7 @@ public final class Companion implements CompanionPlayer.BodyListener {
     public void notifyOwner(String text, boolean settingsLink) {
         ServerPlayer owner = owner();
         if (owner != null) {
-            var message = Component.literal("[VoxelMind Local] " + text).withStyle(ChatFormatting.GOLD);
+            var message = Component.literal("[VoxelMind] " + text).withStyle(ChatFormatting.GOLD);
             if (settingsLink) message.append(" ").append(com.voxelmind.local.command.VmlCommand.settingsLink());
             owner.sendSystemMessage(message);
         }

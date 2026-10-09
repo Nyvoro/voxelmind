@@ -56,13 +56,13 @@ One source tree builds 16 jars (Minecraft 1.21 to 26.2, Stonecutter); the checke
 
 ```sh
 ./gradlew :26.2:build               # versions/26.2/build/libs/voxelmind-local-<ver>+26.2.jar
-./gradlew :26.2:runGameTest         # 37 headless server tests: body, tools, settings, Builder fill/undo, God rain/sequence/rules, Sparks config, AI label
+./gradlew :26.2:runGameTest         # 38 headless server tests: body, tools, settings, Builder fill/undo, God rain/sequence/rules, command boundary, Sparks config, AI label
 ./gradlew :26.2:runClientGameTest   # real client: summon, skin, chat, settings, model list, menu, monitor, memories, create companion/builder/god by clicks, screenshots
 ./gradlew :26.2:runServer           # dedicated dev server in run/ (port 25599, offline mode)
 ./gradlew :26.2:runServer -PvoxelmindApi=http://127.0.0.1:8797/v1     # against a local `wrangler dev` VoxelMind API (also runClient, runGameTest)
 ./gradlew :26.2:runGameTest -PvoxelmindApi=http://127.0.0.1:8797/v1   # with VML_E2E_VOXELMIND_TOKEN: one real call through a local VoxelMind API
 ```
 
-End-to-end with a real model: start `runServer` with `VOXELMIND_LOCAL_API_KEY` set, then drive an owner with `node tools/e2e/owner-bot.cjs tools/e2e/scenarios/<file>.json Lysa`. For Builder and God the bot must be an operator (`run/ops.json`), as in `hosted-builder-god.json` (uses the patched mineflayer from `../voxelmind-platform`). `tools/e2e/map.cjs` prints built structures; `tools/e2e/provider_bench.py` compares OpenRouter providers.
+End-to-end with a real model: start `runServer` with `VOXELMIND_LOCAL_API_KEY` set (a new config starts on VoxelMind Sparks; the key is used once the endpoint is OpenRouter: `/vml endpoint openrouter` in a fresh `run/`), then drive an owner with `node tools/e2e/owner-bot.cjs tools/e2e/scenarios/<file>.json Lysa`. For Builder and God the bot must be an operator (`run/ops.json`), as in `hosted-builder-god.json` (uses the patched mineflayer from `../voxelmind-platform`). `tools/e2e/map.cjs` prints built structures; `tools/e2e/provider_bench.py` compares OpenRouter providers.
 
-Config: `config/voxelmind-local.json` (`apiKey`, `endpointKey`, `baseUrl`, `model`, `memoryModel` (empty = same as `model`), `providerOrder`, `language`, `maxRequestsPerMinute`, `requestTimeoutSeconds`, `localRequestTimeoutSeconds`, `logPrompts`, …).
+Config: `config/voxelmind-local.json` (`apiKey`, `endpointKey`, `baseUrl` (new configs: VoxelMind Sparks), `model`, `memoryModel` (empty = same as `model`), `providerOrder`, `language`, `maxRequestsPerMinute`, `idleOwnerAwayMinutes`, `requestTimeoutSeconds`, `localRequestTimeoutSeconds`, `logPrompts`, …). Written whole or not at all; a file that cannot be read is kept as `voxelmind-local.json.broken-<time>`.

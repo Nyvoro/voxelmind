@@ -37,7 +37,7 @@ public final class LlmClient {
         }
 
         boolean openRouter() {
-            return baseUrl.contains("openrouter.ai");
+            return LocalConfig.isHost(baseUrl, "openrouter.ai");
         }
 
         boolean player2() {
@@ -53,7 +53,8 @@ public final class LlmClient {
     public record ToolCall(String id, String name, @Nullable JsonObject arguments, String rawArguments) {}
 
     public record Response(String content, List<ToolCall> toolCalls, int promptTokens, int completionTokens,
-                           double cost, long latencyMs) {}
+                           double cost, long latencyMs,
+                           int cachedTokens, @Nullable String provider) {}
 
     private LlmClient() {}
 
@@ -141,7 +142,7 @@ public final class LlmClient {
         user.addProperty("role", "user");
         user.addProperty("content", "A player says hello. Wave at them with the wave tool.");
         messages.add(user);
-        boolean hosted = baseUrl.contains("openrouter.ai") || com.voxelmind.local.provider.Player2.isPlayer2(baseUrl)
+        boolean hosted = LocalConfig.isHost(baseUrl, "openrouter.ai") || com.voxelmind.local.provider.Player2.isPlayer2(baseUrl)
                 || com.voxelmind.local.provider.VoxelMindApi.isVoxelMind(baseUrl);
         LocalConfig config = LocalConfig.get();
         Endpoint endpoint = new Endpoint(baseUrl, key, hosted ? Math.max(40, config.requestTimeoutSeconds) : config.localRequestTimeoutSeconds);
@@ -280,14 +281,20 @@ public final class LlmClient {
         }
         int promptTokens = 0;
         int completionTokens = 0;
+        int cachedTokens = 0;
         double cost = 0;
         if (root.has("usage") && root.get("usage").isJsonObject()) {
             JsonObject usage = root.getAsJsonObject("usage");
             if (usage.has("prompt_tokens")) promptTokens = usage.get("prompt_tokens").getAsInt();
             if (usage.has("completion_tokens")) completionTokens = usage.get("completion_tokens").getAsInt();
             if (usage.has("cost") && !usage.get("cost").isJsonNull()) cost = usage.get("cost").getAsDouble();
+            if (usage.has("prompt_tokens_details") && usage.get("prompt_tokens_details").isJsonObject()) {
+                JsonObject details = usage.getAsJsonObject("prompt_tokens_details");
+                if (details.has("cached_tokens") && !details.get("cached_tokens").isJsonNull()) cachedTokens = details.get("cached_tokens").getAsInt();
+            }
         }
-        return new Response(content, calls, promptTokens, completionTokens, cost, latencyMs);
+        String provider = root.has("provider") && root.get("provider").isJsonPrimitive() ? root.get("provider").getAsString() : null;
+        return new Response(content, calls, promptTokens, completionTokens, cost, latencyMs, cachedTokens, provider);
     }
 
     /** The endpoint's error with a plain hint for the usual BYOK problems. */

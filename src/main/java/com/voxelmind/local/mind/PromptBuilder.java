@@ -19,14 +19,13 @@ public final class PromptBuilder {
 
     public record Prompt(String system, String user) {}
 
-    public static Prompt action(Companion c, String wokeBy) {
-        String context = context(c, wokeBy);
+    /** {@code context} is {@link #context(Companion, String)} of this wake. */
+    public static Prompt action(Companion c, String context) {
         String system = PromptTexts.SURVIVAL_FRAME + "\n\n" + PromptTexts.language(language(c));
         return new Prompt(system, context + "\n" + PromptTexts.actionDecision(c.actionRunning()));
     }
 
-    public static Prompt speech(Companion c, String wokeBy) {
-        String context = context(c, wokeBy);
+    public static Prompt speech(Companion c, String context) {
         String system = PromptTexts.SPEECH_FRAME + "\n\n" + PromptTexts.language(language(c));
         return new Prompt(system, PromptTexts.speechDecision(Tools.bodyReference(), context));
     }
@@ -72,9 +71,14 @@ public final class PromptBuilder {
         for (Timeline.Event e : s.timeline.last(200)) if (e.kind.equals("chat_in") || e.kind.equals("whisper_in")) lastHuman = e;
         out.append("CLOCK: ").append(lastHuman == null ? "No human has spoken to you in this memory window." : "You last heard from someone " + Timeline.age(now - lastHuman.epochMs) + ".").append('\n');
         Companion.LastAction last = c.lastAction();
+        List<Timeline.Event> window = window(s.timeline);
         if (last != null && now - last.at() <= LAST_ACTION_WINDOW_MS) {
-            out.append("LAST ACTION: ").append(Timeline.age(now - last.at())).append(": ").append(last.tool()).append(" — \"")
-                    .append(last.result()).append("\". Executor result: ").append(last.outcome()).append(".\n");
+            // The result text is already a [TIMELINE] row when that row is in the window; it is not repeated here.
+            String row = last.call() + ": " + last.result();
+            boolean inTimeline = window.stream().anyMatch(e -> e.kind.equals("result") && e.text.equals(row));
+            out.append("LAST ACTION: ").append(Timeline.age(now - last.at())).append(": ").append(last.tool())
+                    .append(inTimeline ? " (its result is the newest result row in [TIMELINE])" : " — \"" + last.result() + "\"")
+                    .append(". Executor result: ").append(last.outcome()).append(".\n");
         }
         out.append('\n');
 
@@ -83,7 +87,7 @@ public final class PromptBuilder {
                 ? "Your owner is " + s.ownerName + ". Nothing else recorded yet." : s.memory.knowingOwner.trim()).append("\n\n");
 
         out.append("[TIMELINE]\nChronological; the last row is the newest.\n");
-        out.append(Timeline.render(window(s.timeline), now));
+        out.append(Timeline.render(window, now));
         return out.toString();
     }
 

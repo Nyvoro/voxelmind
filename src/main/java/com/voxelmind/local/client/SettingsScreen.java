@@ -31,9 +31,9 @@ import java.util.Locale;
  */
 public final class SettingsScreen extends Screen {
     enum Endpoint {
-        OPENROUTER(LocalConfig.OPENROUTER_URL),
-        PLAYER2(Player2.WEB),
         VOXELMIND(VoxelMindApi.BASE),
+        PLAYER2(Player2.WEB),
+        OPENROUTER(LocalConfig.OPENROUTER_URL),
         OLLAMA("http://localhost:11434/v1"),
         LMSTUDIO("http://localhost:1234/v1"),
         CUSTOM("");
@@ -301,7 +301,7 @@ public final class SettingsScreen extends Screen {
             VoxelMindApi.balance(key).whenComplete((b, error) -> minecraft.execute(() -> {
                 if (endpoint != Endpoint.VOXELMIND || !key.equals(key())) return;
                 account = error != null
-                        ? tr("account.voxelmind.rejected").copy().withStyle(ChatFormatting.RED)
+                        ? failed(error, "account.voxelmind.rejected")
                         : tr("account.voxelmind.ok", b.name(), VmlCommand.sparks(b));
             }));
             return;
@@ -316,7 +316,7 @@ public final class SettingsScreen extends Screen {
             Player2.balance(key).whenComplete((b, error) -> minecraft.execute(() -> {
                 if (endpoint != Endpoint.PLAYER2 || !key.equals(key())) return;
                 account = error != null
-                        ? tr("account.player2.rejected").copy().withStyle(ChatFormatting.RED)
+                        ? failed(error, "account.player2.rejected")
                         : tr("account.player2.ok", VmlCommand.balance(b));
             }));
             return;
@@ -334,9 +334,16 @@ public final class SettingsScreen extends Screen {
         OpenRouterAccount.status(key).whenComplete((st, error) -> minecraft.execute(() -> {
             if (endpoint != Endpoint.OPENROUTER || !key.equals(key())) return;
             account = error != null
-                    ? tr("account.rejected").copy().withStyle(ChatFormatting.RED)
+                    ? failed(error, "account.rejected")
                     : Component.literal(VmlCommand.credit(st));
         }));
+    }
+
+    /** "Rejected" only when the service turned the key down; a service that did not answer is not a reason to sign in again. */
+    private static Component failed(Throwable error, String rejectedKey) {
+        return (com.voxelmind.local.provider.Rejected.is(error)
+                ? tr(rejectedKey)
+                : tr("account.unreachable", com.voxelmind.local.provider.Rejected.message(error))).copy().withStyle(ChatFormatting.RED);
     }
 
     private void startLogin() {

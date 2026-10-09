@@ -16,24 +16,26 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Before a God or Builder with console power touches a world for the first time on a day, the world
- * is saved and zipped to backups/&lt;world&gt;-voxelmind-&lt;date&gt;.zip, like the hosted mod did.
+ * is saved and zipped to backups/&lt;save folder&gt;-voxelmind-&lt;date&gt;.zip, like the hosted mod did.
+ * The newest {@link #KEEP} backups of a world are kept, so a world used every day does not fill the disk.
  */
 public final class WorldBackup {
     private static final java.util.Set<Path> RUNNING = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final int KEEP = 3;
 
     private WorldBackup() {}
 
     /** Returns the backup path when one is started, or null when today's backup already exists. */
     public static Path ensureToday(MinecraftServer server) {
-        String level = server.getWorldData().getLevelName().replaceAll("[^A-Za-z0-9 _.-]", "_");
+        Path world = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
+        String prefix = world.getFileName().toString().replaceAll("[^A-Za-z0-9 _.()-]", "_") + "-voxelmind-";
         Path dir = FabricLoader.getInstance().getGameDir().resolve("backups");
-        Path target = dir.resolve(level + "-voxelmind-" + LocalDate.now() + ".zip");
+        Path target = dir.resolve(prefix + LocalDate.now() + ".zip");
         if (Files.exists(target) || !RUNNING.add(target)) return null;
         server.saveEverything(true, true, true);
-        Path world = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
         Thread thread = new Thread(() -> {
             try {
-                zip(world, target);
+                if (zip(world, target)) prune(dir, prefix);
             } finally {
                 RUNNING.remove(target);
             }
@@ -43,7 +45,23 @@ public final class WorldBackup {
         return target;
     }
 
-    private static void zip(Path world, Path target) {
+    /** Deletes all but the newest {@link #KEEP} backups of one world (the date in the name sorts them). */
+    private static void prune(Path dir, String prefix) {
+        try (Stream<Path> files = Files.list(dir)) {
+            java.util.List<Path> backups = files.filter(p -> {
+                String n = p.getFileName().toString();
+                return n.startsWith(prefix) && n.endsWith(".zip");
+            }).sorted().toList();
+            for (int i = 0; i < backups.size() - KEEP; i++) {
+                Files.deleteIfExists(backups.get(i));
+                VoxelMindLocal.LOG.info("Old world backup removed: {}", backups.get(i).getFileName());
+            }
+        } catch (IOException e) {
+            VoxelMindLocal.LOG.warn("Could not tidy {}", dir, e);
+        }
+    }
+
+    private static boolean zip(Path world, Path target) {
         Path partial = target.resolveSibling(target.getFileName() + ".part");
         try {
             Files.createDirectories(target.getParent());
@@ -62,12 +80,14 @@ public final class WorldBackup {
             }
             Files.move(partial, target);
             VoxelMindLocal.LOG.info("World backup written to {}", target);
+            return true;
         } catch (IOException e) {
             VoxelMindLocal.LOG.error("World backup failed", e);
             try {
                 Files.deleteIfExists(partial);
             } catch (IOException ignored) {
             }
+            return false;
         }
     }
 }

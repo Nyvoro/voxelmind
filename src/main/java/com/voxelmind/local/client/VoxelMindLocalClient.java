@@ -48,10 +48,12 @@ public final class VoxelMindLocalClient implements ClientModInitializer {
             MenuState.tick(client);
         });
 
+        // The old hosted VoxelMind mod puts the same button at the same spot until it is removed.
+        boolean oldMod = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("voxelmind");
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (screen instanceof PauseScreen pause && pause.showsPauseMenu() && MenuState.serverHasMod()) {
-                Screens.getWidgets(screen).add(Button.builder(Component.literal("♦ VoxelMind"),
-                        b -> client.gui.setScreen(new CompanionsScreen(screen))).bounds(4, 4, 80, 20).build());
+                Screens.getWidgets(screen).add(Button.builder(Component.literal(oldMod ? "♦ VoxelMind (new)" : "♦ VoxelMind"),
+                        b -> client.gui.setScreen(new CompanionsScreen(screen))).bounds(4, oldMod ? 28 : 4, oldMod ? 110 : 80, 20).build());
             }
         });
     }

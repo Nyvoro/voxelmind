@@ -40,6 +40,9 @@ public class CompanionPlayer extends ServerPlayer {
     public void tick() {
         super.tick();
         if (isRemoved()) return;
+        // A real client confirms a dimension change (portal, end gateway, teleport) with its next packet; the
+        // body has none, so it confirms itself. Otherwise it stays invulnerable and can never use a portal again.
+        if (isChangingDimension()) hasChangedDimension();
         applyMotor();
         doTick();
         Compat.level(this).getChunkSource().move(this);

@@ -117,6 +117,15 @@ public class HostedGameTests {
         helper.assertTrue(CommandPolicy.refuse("execute as @a run kill @s") != null, "harm hidden in execute still targets @a");
         helper.assertTrue(CommandPolicy.refuse("summon minecraft:zombie ~ ~ ~") == null, "summon is available");
         helper.assertTrue(CommandPolicy.refuse("kill @e[type=minecraft:zombie]") == null, "killing zombies is available");
+        helper.assertTrue(CommandPolicy.refuse("setblock ~ ~1 ~ command_block{Command:\"vml endpoint https://x.example/v1\",auto:1b}") != null,
+                "command blocks would run commands past the boundary");
+        helper.assertTrue(CommandPolicy.refuse("give @p minecraft:repeating_command_block") != null, "no command block items");
+        helper.assertTrue(CommandPolicy.refuse("gamerule max_block_modifications 50000000") != null, "the fill cap stays");
+        helper.assertTrue(CommandPolicy.refuse("gamerule randomTickSpeed 100000") != null, "random ticks stay bounded");
+        helper.assertTrue(CommandPolicy.refuse("tick sprint 1d") != null, "no tick sprint");
+        helper.assertTrue(CommandPolicy.refuse("tick rate 500") != null, "no extreme tick rate");
+        helper.assertTrue(CommandPolicy.refuse("gamerule random_tick_speed 6") == null, "small gamerule changes stay available");
+        helper.assertTrue(CommandPolicy.refuse("tellraw @p {\"text\":\"Your next command: jump!\"}") == null, "the word command in a text is fine");
         helper.succeed();
     }
 

@@ -54,6 +54,8 @@ public final class ServerSmoke implements ModInitializer {
     private int settleTicks;
     private boolean prepared;
     private int failures;
+    private int placementStage;
+    private int placementTicks;
 
     @Override
     public void onInitialize() {
@@ -96,6 +98,10 @@ public final class ServerSmoke implements ModInitializer {
         }
         index++;
         if (index >= steps.size()) {
+            if (placementCheck(server, manager, c)) {
+                index--;
+                return;
+            }
             LOG.info("VML-SMOKE body done failures={} pos={} inventory={}", failures, body.blockPosition().toShortString(), inventory(body));
             phase = 3;
             return;
@@ -144,6 +150,41 @@ public final class ServerSmoke implements ModInitializer {
         steps.add(new Step("dig down", () -> new DigAction("dig(direction=\"down\", distance=3)", "down", 3)));
         steps.add(new Step("survey", () -> new SurveyAction("survey()", "", 6)));
         steps.add(new Step("drop to owner", () -> new DropAction("drop(item=\"dirt\", count=1, target=\"owner\")", "dirt", 1, "owner")));
+    }
+
+    /**
+     * Before 1.21.9 placeNewPlayer put a body where its saved data said: after the owner went 300 blocks away,
+     * a summoned companion must still appear next to the owner. Returns true while the check is running.
+     */
+    private boolean placementCheck(MinecraftServer server, CompanionManager manager, Companion c) {
+        ServerPlayer owner = c.owner();
+        if (owner == null || placementStage >= 3) return false;
+        if (placementTicks > 0) {
+            placementTicks--;
+            return true;
+        }
+        switch (placementStage) {
+            case 0 -> {
+                run(server, "execute as " + owner.getGameProfile().name() + " at @s run tp @s ~300 ~ ~");
+                placementTicks = 60;
+            }
+            case 1 -> {
+                manager.dismiss(c, false, false);
+                String error = manager.summon(owner, c.name(), null);
+                if (error != null) LOG.info("VML-SMOKE body summon_far summon said: {}", error);
+                placementTicks = 40;
+            }
+            default -> {
+                CompanionPlayer body = c.body();
+                double distance = body == null || body.level() != owner.level() ? -1 : Math.sqrt(body.distanceToSqr(owner));
+                boolean ok = distance >= 0 && distance < 6;
+                if (!ok) failures++;
+                LOG.info("VML-SMOKE body summon_far {} distance={} owner={} body={}", ok ? "ok" : "FAIL", String.format("%.1f", distance),
+                        owner.blockPosition().toShortString(), body == null ? "none" : body.blockPosition().toShortString());
+            }
+        }
+        placementStage++;
+        return placementStage < 3 || placementTicks > 0;
     }
 
     private static void run(MinecraftServer server, String command) {

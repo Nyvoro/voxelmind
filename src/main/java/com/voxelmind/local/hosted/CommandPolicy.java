@@ -32,6 +32,10 @@ public final class CommandPolicy {
     private static final Pattern ENTITY_SELECTOR = Pattern.compile("@e(\\[[^\\]]*\\])?", Pattern.CASE_INSENSITIVE);
     private static final Pattern POSITIVE_TYPE = Pattern.compile("type\\s*=\\s*(?!!)\\S", Pattern.CASE_INSENSITIVE);
     private static final Pattern NOT_PLAYER = Pattern.compile("type\\s*=\\s*!(minecraft:)?player", Pattern.CASE_INSENSITIVE);
+    /** Command blocks would run commands past this boundary; their items and their Command NBT (case-sensitive, like NBT) are refused. */
+    private static final Pattern COMMAND_BLOCK = Pattern.compile("(?i:command_block)|\\bCommand\\s*:");
+    private static final Pattern GAMERULE = Pattern.compile("\\bgamerule\\s+(?:minecraft:)?([a-z_]+)\\s+(\\d+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TICK = Pattern.compile("\\btick\\s+(rate|sprint)\\b(?:\\s+(\\d+(?:\\.\\d+)?))?", Pattern.CASE_INSENSITIVE);
 
     private CommandPolicy() {}
 
@@ -53,6 +57,9 @@ public final class CommandPolicy {
             if (!ALLOWED.contains(v)) return "\"" + v + "\" is not in the command set";
         }
         if (verbs.getFirst().equals("execute") && verbs.size() == 1) return "execute needs a \"run <command>\" part";
+        if (COMMAND_BLOCK.matcher(s).find()) return "command blocks are not available here";
+        String limit = overLimit(s);
+        if (limit != null) return limit;
         boolean harmful = verbs.stream().anyMatch(HARMFUL::contains);
         if (harmful) {
             if (EVERY_PLAYER.matcher(s).find()) return "harmful commands may not target every player (@a) — name the player or use @p";
@@ -65,6 +72,30 @@ public final class CommandPolicy {
                     }
                 }
             }
+        }
+        return null;
+    }
+
+    /** Gamerules and tick settings above these values stall or freeze the server thread. */
+    private static @Nullable String overLimit(String s) {
+        Matcher g = GAMERULE.matcher(s);
+        while (g.find()) {
+            String rule = g.group(1).toLowerCase(Locale.ROOT).replace("_", "");
+            long value;
+            try {
+                value = Long.parseLong(g.group(2));
+            } catch (NumberFormatException e) {
+                return "that gamerule value is out of range";
+            }
+            if ((rule.equals("maxblockmodifications") || rule.equals("commandmodificationblocklimit")) && value > 32768) {
+                return "this world allows at most 32768 block changes per command";
+            }
+            if (rule.equals("randomtickspeed") && value > 100) return "a random tick speed above 100 stalls the server";
+        }
+        Matcher t = TICK.matcher(s);
+        while (t.find()) {
+            if (t.group(1).equalsIgnoreCase("sprint")) return "tick sprint stalls the server; time add moves time forward";
+            if (t.group(2) != null && Double.parseDouble(t.group(2)) > 100) return "a tick rate above 100 stalls the server";
         }
         return null;
     }

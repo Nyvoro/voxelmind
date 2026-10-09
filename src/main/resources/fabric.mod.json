@@ -2,13 +2,15 @@
   "schemaVersion": 1,
   "id": "voxelmind_local",
   "version": "${version}",
-  "name": "VoxelMind Local",
-  "description": "An AI companion that lives inside your world. Runs entirely in this mod with your own LLM key.",
+  "name": "VoxelMind",
+  "description": "AI beings that live in your world: a companion with a real player body, a Builder fairy and a God game master. They think with the AI you choose: VoxelMind Sparks, Player2, your own OpenRouter account or a local model.",
+  "icon": "assets/voxelmind_local/icon.png",
   "authors": [
     "Nyvoro UG"
   ],
   "contact": {
-    "homepage": "https://voxel-mind.com"
+    "homepage": "https://voxel-mind.com",
+    "issues": "https://discord.gg/gtJV3XgDWy"
   },
   "license": "MIT",
   "environment": "*",

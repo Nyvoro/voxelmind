@@ -1,6 +1,6 @@
 # VoxelMind Local – Testanleitung
 
-Stand 09.10.2026 · Version 0.4.0 für Minecraft **1.21 bis 26.2** (16 Versionen, Fabric); die Test-Instanz nutzt 26.2, Details in `docs/VERSIONS.md`
+Stand 10.10.2026 · Version 0.4.1 für Minecraft **1.21 bis 26.2** (16 Versionen, Fabric); die Test-Instanz nutzt 26.2, Details in `docs/VERSIONS.md`
 
 Drei Arten von KI-Wesen laufen komplett im Mod:
 - **Begleiter** mit echtem Spielerkörper.
@@ -108,7 +108,7 @@ Werkzeuge des Körpers: go_to, follow, explore, mine_block, gather, dig, collect
 
 Die Kosten zahlt der Spieler direkt an OpenRouter (oder gar nichts bei einem lokalen Modell). Die Modellauswahl schätzt für jedes Modell die Kosten pro Stunde aus dem Listenpreis und gemessenen ~530 Aufrufen à ~8.300 Tokens pro Spielstunde, ohne Prompt-Cache. Für das getestete Standardmodell steht der gemessene Wert.
 
-- Modell `deepseek/deepseek-v4-flash-0731` über OpenRouter, Anbieter-Reihenfolge StreamLake → Together → Wafer. Bei jedem anderen Modell wählt OpenRouter den Anbieter selbst.
+- Modell `deepseek/deepseek-v4-flash-0731` über OpenRouter, Anbieter-Reihenfolge Relace → Sail Research → Together (US, ohne Datenspeicherung, wie bei VoxelMind Sparks). Bei jedem anderen Modell wählt OpenRouter den Anbieter selbst.
 - **Etwa 10–37 Cent pro Stunde aktiven Spielens**, Schnitt ~20 Cent (151 Aufrufe in 17 Minuten Testspiel: $0,056).
 - Reaktionszeit p50 3,0 s, p90 4,5 s.
 - Technische Bremse: höchstens 20 Anfragen pro Minute (`maxRequestsPerMinute`).

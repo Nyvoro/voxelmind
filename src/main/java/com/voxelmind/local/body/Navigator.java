@@ -25,6 +25,14 @@ public final class Navigator {
     private static final int MAX_LEGS = 12;
     private static final int MAX_REPLANS = 6;
     private static final double DIG_RANGE = 64;
+    /**
+     * A search that found no route is not repeated for the same start and target within this many ticks: callers
+     * that follow or chase re-plan every tick, and a failed search (walk plus dig budget) costs a large part of a
+     * tick. A technical bound on server-thread work; the caller still sees FAILED with the same reason.
+     */
+    private static final int NO_ROUTE_BACKOFF_TICKS = 20;
+    /** Within one action a followed or chased target moves a little every tick. */
+    private static final int NO_ROUTE_TARGET_SLACK = 8;
 
     private final CompanionPlayer body;
     private @Nullable List<BlockPos> path;
@@ -46,6 +54,9 @@ public final class Navigator {
     private int pillarTicks;
     private int dug;
     private int placed;
+    private @Nullable BlockPos noRouteFrom;
+    private @Nullable BlockPos noRouteTo;
+    private long noRouteAt;
 
     public Navigator(CompanionPlayer body) {
         this.body = body;
@@ -89,6 +100,13 @@ public final class Navigator {
         this.goal = goal;
         this.legs = 0;
         this.replans = 0;
+        long now = Compat.level(body).getGameTime();
+        if (noRouteTo != null && noRouteFrom != null && now - noRouteAt < NO_ROUTE_BACKOFF_TICKS
+                && noRouteTo.distManhattan(target) <= NO_ROUTE_TARGET_SLACK && noRouteFrom.distManhattan(feet()) <= 2) {
+            stop();
+            status = Status.FAILED;
+            return status;
+        }
         return plan();
     }
 
@@ -110,6 +128,9 @@ public final class Navigator {
             if (digging.reachesGoal() || result.path().size() < 2) result = digging;
         }
         if (result.isEmpty() || result.path().size() < 2) {
+            noRouteFrom = start;
+            noRouteTo = target;
+            noRouteAt = level.getGameTime();
             return fail("no route from " + fmt(start) + " toward " + fmt(target) + (allowDig ? " (not even by digging)" : ""));
         }
         path = result.path();

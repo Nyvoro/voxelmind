@@ -43,8 +43,29 @@ public class SettingsGameTests {
     }
 
     @GameTest
+    public void newConfigStartsOnSparksAndKeysOnlyReachTheirHosts(GameTestHelper helper) {
+        LocalConfig config = new LocalConfig();
+        helper.assertTrue(config.isVoxelMind() && !config.hasCredentials(), "a new config starts on VoxelMind Sparks and waits for the sign-in");
+        config.selectEndpoint(LocalConfig.OPENROUTER_URL);
+        config.setKey("sk-or-v1-secret");
+        config.selectEndpoint("https://openrouter.ai.example.net/api/v1");
+        helper.assertFalse(config.isOpenRouter(), "a lookalike host is not OpenRouter");
+        helper.assertTrue(config.effectiveApiKey().isEmpty(), "the OpenRouter key never goes to a lookalike host");
+        config.selectEndpoint("https://api.voxel-mind.com.example.net/v1");
+        helper.assertFalse(config.isVoxelMind(), "a lookalike host is not the VoxelMind API");
+        config.selectEndpoint("https://api.player2.game.example.net/v1");
+        helper.assertFalse(config.isPlayer2(), "a lookalike host is not Player2");
+        helper.assertTrue(LocalConfig.isHost("https://OpenRouter.ai/api/v1", "openrouter.ai"), "hosts compare without case");
+        helper.assertFalse(LocalConfig.isHost("http://openrouter.ai/api/v1", "openrouter.ai"), "only https gets a stored key");
+        helper.assertTrue(LocalConfig.DEFAULT_PROVIDER_ORDER.equals(java.util.List.of("Relace", "Sail Research", "Together")),
+                "the default model is routed to the zero-data-retention providers the VoxelMind API uses");
+        helper.succeed();
+    }
+
+    @GameTest
     public void keysStayWithTheirEndpoint(GameTestHelper helper) {
         LocalConfig config = new LocalConfig();
+        config.selectEndpoint(LocalConfig.OPENROUTER_URL);
         config.setKey("sk-or-v1-test");
         config.selectEndpoint("http://localhost:11434/v1/");
         helper.assertTrue(config.baseUrl.equals("http://localhost:11434/v1"), "trailing slash removed");
@@ -78,6 +99,7 @@ public class SettingsGameTests {
     @GameTest
     public void player2KeepsItsOwnKeyAndModel(GameTestHelper helper) {
         LocalConfig config = new LocalConfig();
+        config.selectEndpoint(LocalConfig.OPENROUTER_URL);
         config.setKey("sk-or-v1-openrouter");
         config.selectEndpoint(Player2.WEB);
         helper.assertTrue(config.isPlayer2() && !config.isOpenRouter(), "Player2 endpoint");
@@ -119,6 +141,7 @@ public class SettingsGameTests {
     @GameTest
     public void voxelmindKeepsItsOwnTokenAndModel(GameTestHelper helper) {
         LocalConfig config = new LocalConfig();
+        config.selectEndpoint(LocalConfig.OPENROUTER_URL);
         config.setKey("sk-or-v1-openrouter");
         config.selectEndpoint(com.voxelmind.local.provider.VoxelMindApi.BASE);
         helper.assertTrue(config.isVoxelMind() && !config.isOpenRouter() && !config.isPlayer2(), "VoxelMind endpoint");
@@ -133,7 +156,7 @@ public class SettingsGameTests {
         boolean linksToShop = notice.toFlatList().stream().anyMatch(part ->
                 part.getStyle().getClickEvent() instanceof net.minecraft.network.chat.ClickEvent.OpenUrl url
                         && url.uri().toString().endsWith("/sparks?name=Steve"));
-        helper.assertTrue(notice.getString().contains("Sparks are used up") && linksToShop, "notice: " + notice.getString());
+        helper.assertTrue(notice.getString().contains("the Sparks of Steve are used up") && linksToShop, "notice: " + notice.getString());
         helper.succeed();
     }
 
@@ -184,6 +207,17 @@ public class SettingsGameTests {
 
     @GameTest
     public void catalogReadsOpenRouterAndOllama(GameTestHelper helper) {
+        // The price lines read the game's own config: measured costs are OpenRouter's.
+        String endpointBefore = LocalConfig.get().baseUrl;
+        LocalConfig.get().baseUrl = LocalConfig.OPENROUTER_URL;
+        try {
+            catalogChecks(helper);
+        } finally {
+            LocalConfig.get().baseUrl = endpointBefore;
+        }
+    }
+
+    private void catalogChecks(GameTestHelper helper) {
         List<ModelCatalog.Model> models = ModelCatalog.parse(OPENROUTER_MODELS);
         helper.assertTrue(models.size() == 4, "image-only and batch models left out, got " + models.size());
         ModelCatalog.Model router = models.stream().filter(m -> m.id().equals("openrouter/auto")).findFirst().orElseThrow();

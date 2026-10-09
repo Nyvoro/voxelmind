@@ -38,7 +38,7 @@ public final class VoxelMindApi {
     private VoxelMindApi() {}
 
     public static boolean isVoxelMind(@Nullable String baseUrl) {
-        return baseUrl != null && (baseUrl.contains("api.voxel-mind.com") || baseUrl.equals(BASE));
+        return baseUrl != null && (com.voxelmind.local.config.LocalConfig.isHost(baseUrl, "api.voxel-mind.com") || baseUrl.equals(BASE));
     }
 
     /** The shop page, with the Minecraft name filled in when it is known. */
@@ -90,7 +90,7 @@ public final class VoxelMindApi {
                 .build();
         return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(r -> {
             JsonObject root = object(r.body());
-            if (r.statusCode() == 401) throw new IllegalStateException("the VoxelMind sign-in is no longer valid; sign in again");
+            if (r.statusCode() == 401) throw new Rejected("the VoxelMind sign-in is no longer valid; sign in again");
             if (r.statusCode() / 100 != 2 || root == null) throw new IllegalStateException(error(r.statusCode(), root));
             return new Balance(num(root, "sparks"), num(root, "free_sparks"),
                     root.has("free_cap_reached") && root.get("free_cap_reached").getAsBoolean(), root.has("name") ? root.get("name").getAsString() : "");
@@ -98,9 +98,10 @@ public final class VoxelMindApi {
     }
 
     /** Stores the token and makes the VoxelMind API the endpoint, with its one model. */
-    public static void adopt(String token) {
+    public static void adopt(String token, String name) {
         LocalConfig config = LocalConfig.get();
         config.voxelmindKey = token.trim();
+        config.voxelmindName = name == null ? "" : name.trim();
         config.selectEndpoint(BASE);
         LocalConfig.save();
     }

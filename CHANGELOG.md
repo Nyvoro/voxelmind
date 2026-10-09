@@ -1,5 +1,23 @@
 # VoxelMind Local – Changelog
 
+## 0.4.1 (2026-10-10)
+
+**Fixes for launch weekend: companions keep their memory, come to you on every version, survive portals, and the AI settings start where most players want to begin.**
+
+- **Long-term memory no longer freezes.** Once a companion's memory reached its size limit, new experiences were cut off and never stored. Now the memory is kept as the AI writes it; if it grows far too long, the AI is asked once more to condense it itself.
+- **Summoning on Minecraft 1.21 to 1.21.8:** a companion called after you travelled far now appears next to you (it used to appear where it was last, or at the world spawn), also across dimensions.
+- **Portals:** after a trip through a nether or end portal, a companion can be hurt again and can use portals again.
+- **AI settings start with VoxelMind Sparks** in a new installation: sign in with your Minecraft account, welcome Sparks included. Player2, OpenRouter and local models are one click further, as before.
+- **Chat in your language:** the hint when you join, the "no AI connected yet" notice, the AI label and the Sparks lines are now German in a German game (English for players without the mod).
+- **Sparks on servers and in LAN worlds:** links and notices name the account the world actually spends; redeeming a code says which account got the Sparks; `/vml key <token>` on a server says whose Sparks it uses.
+- **Safety:** keys and sign-ins only go to the exact service they belong to (a look-alike address never gets them); AI settings commands can no longer be run by command blocks or datapack functions; God and Builder cannot place command blocks, lift the block-change limit, or set extreme tick speeds; a God's rules can no longer crash the server by triggering each other.
+- **Performance and cost:** companions no longer search for a path every tick when a target is unreachable (lag on servers); the perception is built once per decision for both thinking lanes; quiet-time thinking pauses while the owner is away from the keyboard for 5 minutes (`idleOwnerAwayMinutes` in the config); a little less repetition in each prompt.
+- **With your own OpenRouter key**, the default model now goes to the same US providers with zero data retention that VoxelMind Sparks uses (Relace, Sail Research, Together).
+- **Files:** companion files and the config are written whole or not at all; a config the game cannot read is kept aside instead of being overwritten; world backups before a God or Builder session keep the newest three per world.
+- **Servers:** each player who is not the host or an operator can have 3 companions in the world at once (`maxCompanionsPerPlayer`); memory rewrites count against the shared request budget; a God's rule that fires every tick shows up as one counted line every 5 seconds.
+- **AI settings:** when VoxelMind, Player2 or OpenRouter does not answer, the settings say "could not check right now" instead of asking you to sign in again.
+- The mod shows as **VoxelMind** with its icon in Mod Menu and launchers. If the old hosted VoxelMind mod is installed too, the pause-menu button of this one reads "♦ VoxelMind (new)".
+
 ## 0.4.0 (2026-10-09)
 
 **Builder and God are back, VoxelMind has its own AI service, and it runs on every Minecraft version from 1.21 to 26.2.**

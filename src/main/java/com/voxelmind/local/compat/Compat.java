@@ -128,6 +128,15 @@ public final class Compat {
         //?}
     }
 
+    /** Moves a player to a spot in a level, across dimensions if needed. */
+    public static void teleport(ServerPlayer player, ServerLevel level, double x, double y, double z, float yaw) {
+        //? if >=1.21.2 {
+        player.teleportTo(level, x, y, z, java.util.Set.of(), yaw, 0f, true);
+        //?} else {
+        /*player.teleportTo(level, x, y, z, yaw, 0f);
+        *///?}
+    }
+
     /** The server level a player is in (ServerPlayer.level() only returns ServerLevel from 1.21.6 on). */
     public static ServerLevel level(ServerPlayer player) {
         //? if >=1.21.6 {

@@ -191,14 +191,17 @@ public final class Tools {
         SPEECH.put(name, new Spec(name, description, parameters, factory));
     }
 
-    /** Action-lane tools; keep_current_action only while a body action runs. */
+    /**
+     * Action-lane tools; keep_current_action only while a body action runs, and last, so both variants share the
+     * same tool prefix for the provider's prompt cache.
+     */
     public static JsonArray actionTools(boolean bodyActionRunning) {
         JsonArray out = new JsonArray();
-        if (bodyActionRunning) out.add(schema(ACTION.get("keep_current_action")));
         for (Spec spec : ACTION.values()) {
             if (spec.name().equals("keep_current_action")) continue;
             out.add(schema(spec));
         }
+        if (bodyActionRunning) out.add(schema(ACTION.get("keep_current_action")));
         return out;
     }
 

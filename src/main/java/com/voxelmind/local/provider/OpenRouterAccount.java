@@ -181,7 +181,7 @@ public final class OpenRouterAccount {
                 .GET()
                 .build();
         return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(response -> {
-            if (response.statusCode() == 401) throw new IllegalStateException("OpenRouter does not accept this key");
+            if (response.statusCode() == 401) throw new Rejected("OpenRouter does not accept this key");
             if (response.statusCode() / 100 != 2) throw new IllegalStateException("HTTP " + response.statusCode() + " from " + url);
             JsonObject root = parseObject(response.body());
             return root == null ? new JsonObject() : root;

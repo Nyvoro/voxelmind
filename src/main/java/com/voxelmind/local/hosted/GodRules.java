@@ -9,7 +9,6 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -85,28 +84,35 @@ public final class GodRules {
         return new ArrayList<>(rules.values());
     }
 
+    /** How deep rules may set off rules through their own commands: a technical recursion limit. */
+    private static final int MAX_DEPTH = 2;
+    private int depth;
+
     public void fire(MinecraftServer server, Event e, @Nullable ServerPlayer host) {
+        if (depth >= MAX_DEPTH) return;
         long now = System.currentTimeMillis();
-        Iterator<Rule> it = rules.values().iterator();
-        while (it.hasNext()) {
-            Rule r = it.next();
-            if (r.expiresAt < now || r.fires >= MAX_LIFETIME) {
-                it.remove();
-                continue;
+        rules.values().removeIf(r -> r.expiresAt < now || r.fires >= MAX_LIFETIME);
+        depth++;
+        try {
+            // A copy: the commands below can fire rules again and change the map while this pass runs.
+            for (Rule r : List.copyOf(rules.values())) {
+                if (rules.get(r.label.toLowerCase(Locale.ROOT)) != r || r.fires >= MAX_LIFETIME) continue;
+                if (!r.when.equals(e.kind()) || !matches(r, e)) continue;
+                if (now - r.secondStart > 1000) {
+                    r.secondStart = now;
+                    r.secondFires = 0;
+                }
+                if (++r.secondFires > MAX_PER_SECOND) continue;
+                r.fires++;
+                r.pendingFires++;
+                for (String template : r.then) {
+                    String command = substitute(template, e, host);
+                    if (CommandPolicy.refuse(command) != null) continue;
+                    CommandRunner.runAt(server, e.level(), e.pos(), new Vec2(0, 0), sourceName, command);
+                }
             }
-            if (!r.when.equals(e.kind()) || !matches(r, e)) continue;
-            if (now - r.secondStart > 1000) {
-                r.secondStart = now;
-                r.secondFires = 0;
-            }
-            if (++r.secondFires > MAX_PER_SECOND) continue;
-            r.fires++;
-            r.pendingFires++;
-            for (String template : r.then) {
-                String command = substitute(template, e, host);
-                if (CommandPolicy.refuse(command) != null) continue;
-                CommandRunner.runAt(server, e.level(), e.pos(), new Vec2(0, 0), sourceName, command);
-            }
+        } finally {
+            depth--;
         }
     }
 

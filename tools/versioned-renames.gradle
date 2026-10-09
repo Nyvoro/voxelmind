@@ -64,6 +64,7 @@ ext.versionedRenames = { List<Integer> v ->
         r["LevelBasedPermissionSet.ADMIN"] = "4"
         r["player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)"] = "player.hasPermissions(2)"
         r["Commands.hasPermission(Commands.LEVEL_GAMEMASTERS).test(src)"] = "src.hasPermission(Commands.LEVEL_GAMEMASTERS)"
+        r["Commands.hasPermission(Commands.LEVEL_OWNERS).test(src)"] = "src.hasPermission(Commands.LEVEL_OWNERS)"
     }
 
     // 1.21.2: registry getValue/get, build height accessors, spawn reasons, default skin.

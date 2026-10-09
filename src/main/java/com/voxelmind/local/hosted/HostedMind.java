@@ -188,7 +188,8 @@ public abstract class HostedMind {
             observeUntil = 0;
             wake("observe", 0);
         }
-        if (idleMs() > 0 && observeUntil == 0 && !inFlight && dueAt == 0 && now - lastActivityAt >= idleMs()) wake("idle", 0);
+        if (idleMs() > 0 && observeUntil == 0 && !inFlight && dueAt == 0 && now - lastActivityAt >= idleMs()
+                && com.voxelmind.local.mind.Mind.ownerActive(host())) wake("idle", 0);
         if (dueAt > 0 && now >= dueAt && !inFlight && now >= retryAt && now - lastTurnAt >= minGapMs()) launch(server, now);
         memory.tick(c, server, log);
     }
@@ -197,7 +198,7 @@ public abstract class HostedMind {
         if (!LocalConfig.get().hasCredentials()) {
             if (now - lastNoticeAt > 120_000) {
                 lastNoticeAt = now;
-                c.notifyOwner(c.name() + " has no AI model connected yet. Sign in with OpenRouter or Player2, or add a key:", true);
+                c.notifyOwner(com.voxelmind.local.command.VmlCommand.noAiNotice(c.name()));
             }
             reasons.clear();
             dueAt = 0;
@@ -343,6 +344,8 @@ public abstract class HostedMind {
             entry.addProperty("prompt_tokens", response.promptTokens());
             entry.addProperty("completion_tokens", response.completionTokens());
             entry.addProperty("cost_usd", response.cost());
+            entry.addProperty("cached_tokens", response.cachedTokens());
+            if (response.provider() != null) entry.addProperty("provider", response.provider());
         }
         if (error != null) entry.addProperty("error", error.toString());
         log.write(entry);
