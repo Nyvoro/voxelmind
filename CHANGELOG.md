@@ -1,5 +1,15 @@
 # VoxelMind Local – Changelog
 
+## 0.4.2 (2026-10-10)
+
+**Companions say what they do and do what they say, use doors, and know what you built.**
+
+- **One mind instead of two.** A companion used to answer you with one model call and choose its action with a second one, and neither knew what the other did. So it could say "I'll patch the hole" or "I'm eating" while its body did something else or nothing. Now one decision holds both what it says and what it does. Body tools take an optional `say` line, so models that answer with a single tool call (Player2's free model) also speak and act at once. One call instead of two per chat line also makes conversation cheaper.
+- **Doors and gates.** Walking opens wooden and copper doors and fence gates on the way and closes the ones it opened behind it; iron doors stay shut. A house with a door is no longer a box the companion can only leave by breaking a wall. New body tool `use_block`: right-click a door, trapdoor, gate, lever, button or similar, with the state before and after in the result.
+- **Builds are facts.** Every block a player places (you or a companion) is remembered per world (`voxelmind-local/placed.dat`). The companion sees what is above its head (open sky, or which block and who placed it) instead of "below the surface" under every roof, what it stands on, how many placed blocks are around and whose, and nearby doors, gates and trapdoors with their open state. Walking never digs through a placed block (dirt and stone huts included), gather and mine_block by block type take only blocks nobody placed, and dig and mine_block say whose blocks they broke.
+- **Longer conversation memory.** The prompt keeps the chat of the last 30 minutes (at least 24 lines, up to about 6000 characters) instead of the last 24 lines, and the same result repeated many times in a row shows up once with a count.
+- **Measured.** `tools/e2e` gained scenarios built from a customer's session (patch a hole, come out of and go back into a house with a door, go mining from inside the house, a plan buried under chatter) and `say-do.cjs`, which lets a judge model label every line the companion said against what its body did.
+
 ## 0.4.1 (2026-10-10)
 
 **Fixes for launch weekend: companions keep their memory, come to you on every version, survive portals, and the AI settings start where most players want to begin.**

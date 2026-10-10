@@ -13,22 +13,22 @@ version, on Fabric API and on the Fabric loader listed below. Minecraft 1.21.x r
 
 | Minecraft | Java | Fabric loader (min) | Fabric API (min) | Mappings | Jar |
 |---|---|---|---|---|---|
-| 1.21 | 21 | 0.19.5 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.jar` |
-| 1.21.1 | 21 | 0.16.9 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.1.jar` |
-| 1.21.2 | 21 | 0.19.5 | 0.106.1+1.21.2 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.2.jar` |
-| 1.21.3 | 21 | 0.19.5 | 0.114.1+1.21.3 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.3.jar` |
-| 1.21.4 | 21 | 0.16.9 | 0.113.0+1.21.4 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.4.jar` |
-| 1.21.5 | 21 | 0.16.10 | 0.119.5+1.21.5 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.5.jar` |
-| 1.21.6 | 21 | 0.16.13 | 0.128.2+1.21.6 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.6.jar` |
-| 1.21.7 | 21 | 0.19.5 | 0.129.0+1.21.7 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.7.jar` |
-| 1.21.8 | 21 | 0.16.13 | 0.136.1+1.21.8 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.8.jar` |
-| 1.21.9 | 21 | 0.19.5 | 0.134.1+1.21.9 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.9.jar` |
-| 1.21.10 | 21 | 0.19.5 | 0.138.4+1.21.10 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.10.jar` |
-| 1.21.11 | 21 | 0.19.5 | 0.141.6+1.21.11 | Mojang, remapped | `voxelmind-local-0.4.1+1.21.11.jar` |
-| 26.1 | 25 | 0.19.5 | 0.145.1+26.1 | none (unobfuscated) | `voxelmind-local-0.4.1+26.1.jar` |
-| 26.1.1 | 25 | 0.19.5 | 0.145.4+26.1.1 | none (unobfuscated) | `voxelmind-local-0.4.1+26.1.1.jar` |
-| 26.1.2 | 25 | 0.19.5 | 0.155.2+26.1.2 | none (unobfuscated) | `voxelmind-local-0.4.1+26.1.2.jar` |
-| 26.2 | 25 | 0.19.5 | 0.159.0+26.2 | none (unobfuscated) | `voxelmind-local-0.4.1+26.2.jar` |
+| 1.21 | 21 | 0.19.5 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.jar` |
+| 1.21.1 | 21 | 0.16.9 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.1.jar` |
+| 1.21.2 | 21 | 0.19.5 | 0.106.1+1.21.2 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.2.jar` |
+| 1.21.3 | 21 | 0.19.5 | 0.114.1+1.21.3 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.3.jar` |
+| 1.21.4 | 21 | 0.16.9 | 0.113.0+1.21.4 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.4.jar` |
+| 1.21.5 | 21 | 0.16.10 | 0.119.5+1.21.5 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.5.jar` |
+| 1.21.6 | 21 | 0.16.13 | 0.128.2+1.21.6 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.6.jar` |
+| 1.21.7 | 21 | 0.19.5 | 0.129.0+1.21.7 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.7.jar` |
+| 1.21.8 | 21 | 0.16.13 | 0.136.1+1.21.8 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.8.jar` |
+| 1.21.9 | 21 | 0.19.5 | 0.134.1+1.21.9 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.9.jar` |
+| 1.21.10 | 21 | 0.19.5 | 0.138.4+1.21.10 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.10.jar` |
+| 1.21.11 | 21 | 0.19.5 | 0.141.6+1.21.11 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.11.jar` |
+| 26.1 | 25 | 0.19.5 | 0.145.1+26.1 | none (unobfuscated) | `voxelmind-local-0.4.2+26.1.jar` |
+| 26.1.1 | 25 | 0.19.5 | 0.145.4+26.1.1 | none (unobfuscated) | `voxelmind-local-0.4.2+26.1.1.jar` |
+| 26.1.2 | 25 | 0.19.5 | 0.155.2+26.1.2 | none (unobfuscated) | `voxelmind-local-0.4.2+26.1.2.jar` |
+| 26.2 | 25 | 0.19.5 | 0.159.0+26.2 | none (unobfuscated) | `voxelmind-local-0.4.2+26.2.jar` |
 
 The Fabric API / loader versions are the ones of `voxelmind-mod/versions/*/gradle.properties`
 (Minecraft 1.21 uses the Fabric API build `0.116.12+1.21.1`, which also runs on 1.21). The mod is

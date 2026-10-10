@@ -1,6 +1,6 @@
 # VoxelMind Local – Testanleitung
 
-Stand 10.10.2026 · Version 0.4.1 für Minecraft **1.21 bis 26.2** (16 Versionen, Fabric); die Test-Instanz nutzt 26.2, Details in `docs/VERSIONS.md`
+Stand 10.10.2026 · Version 0.4.2 für Minecraft **1.21 bis 26.2** (16 Versionen, Fabric); die Test-Instanz nutzt 26.2, Details in `docs/VERSIONS.md`
 
 Drei Arten von KI-Wesen laufen komplett im Mod:
 - **Begleiter** mit echtem Spielerkörper.
