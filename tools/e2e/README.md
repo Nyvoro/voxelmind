@@ -85,7 +85,7 @@ World checks (the hard signal):
 | 12 mine from the house | **dug down through the floor** (95/96), drowned twice, claimed iron it never mined | left through the door, house 96/96 in both runs; drowned once in the first run, before the water fact |
 | 13 plan under chatter | plan recalled, step 2 done | plan recalled, step 2 done (both runs) |
 
-say-do.cjs (lines that imply a body action and disagree with the decisions): 0.4.1 7/29 (24 %, re-judged with the current script); 0.4.2 7/26 (27 %) in the after-run and 4/15 in the final run of 11 and 13; gpt-oss-120b 1/8. Contradictions (saying one thing while doing another) fell from 4 to 1-2; announcements in chatty replies without an action ("then off to look for iron" after "don't start yet") rose in scenario 13. With one or two dozen lines per run the judge varies by a few lines between runs.
+say-do.cjs (lines that imply a body action and disagree with the decisions), DeepSeek: 0.4.1 7/29 (24 %, re-judged with the current script); 0.4.2 with the final facts (door sides, doorway result) 3/26 (12 %: scenarios 10, 11, 12 each 0, scenario 13 3/19); earlier 0.4.2 builds without the door sides 7/26 and 4/15; gpt-oss-120b 1/8. Contradictions (saying one thing while doing another) fell from 4 to 0-2 per run. DeepSeek still calls a doorway "inside" although the result names the sides (roof east, open sky west); it ends inside with the door closed. With one or two dozen lines per run the judge varies by a few lines between runs.
 
 ## Formats since 0.4.2
 

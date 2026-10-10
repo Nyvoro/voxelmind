@@ -41,7 +41,7 @@ Verification status of 0.4.2 (10.10.2026; details below):
 | Release jar builds, metadata checked (`tools/build-all.sh`) | yes | yes | yes | yes |
 | Production dedicated-server boot, remapped jar, all five mixins (`tools/smoke-servers.sh`) | yes | yes | yes | yes |
 | Client smoke: every screen, real body actions, summon after the owner went 300 blocks away (`tools/smoke-client.sh`) | 1.21.1 and 1.21.8 | yes | 0.4.0 only | yes |
-| 106 server game tests (`runGameTest`) | not available | yes | 26.1.2 with 48 of them during the review | yes |
+| 109 server game tests (`runGameTest`) | not available | yes | 26.1.2 with 48 of them during the review | yes |
 | Long client game test (`runClientGameTest`) | not available | not available | not available | yes |
 
 ## Build commands
@@ -62,7 +62,7 @@ export GRADLE_USER_HOME=V:/Android/Gradle
 bash tools/build-all.sh                      # or: bash tools/build-all.sh 1.21.1 26.2
 
 # 26.2 tests (26.2 is the default active project)
-./gradlew :26.2:runGameTest                  # 106 server game tests
+./gradlew :26.2:runGameTest                  # 109 server game tests
 ./gradlew :26.2:runClientGameTest            # the long client test with screenshots
 ./gradlew :26.2:runServer                    # dev server in voxelmind-local/run (port 25599, owner-bot scenarios)
 ./gradlew :26.2:build                        # jar + game tests
@@ -138,7 +138,7 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
   The `VML-SMOKE body ...` lines are written to `build/client-smoke/<mc>/smoke-lines.txt`; apart from coordinates they are
   identical on all 16 versions. A render error would crash the client and fail the run. With `SMOKE_SHOTS=1` it also photographs
   each screen for visual comparison against 26.2.
-- **26.2 game tests**: `runGameTest` (106 server tests: body, tools, settings, hosted minds, one mind against a stub endpoint, doors, placed blocks) and `runClientGameTest`
+- **26.2 game tests**: `runGameTest` (109 server tests: body, tools, settings, hosted minds, one mind against a stub endpoint, doors, placed blocks) and `runClientGameTest`
   (one long client test with screenshots) - must stay green; they also run for 1.21.11 and 26.1 / 26.1.1 / 26.1.2
   (server tests). Older targets differ in `GameTestHelper` (Component messages instead of Strings from 1.21.11) and, below
   1.21.5, in how tests are registered; the client smoke covers the same body actions there.

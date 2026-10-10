@@ -57,7 +57,7 @@ One source tree builds 16 jars (Minecraft 1.21 to 26.2, Stonecutter); the checke
 
 ```sh
 ./gradlew :26.2:build               # versions/26.2/build/libs/voxelmind-local-<ver>+26.2.jar
-./gradlew :26.2:runGameTest         # 106 headless server tests: body, tools, settings, Builder fill/undo, God rain/sequence/rules, command boundary, Sparks config, AI label, one mind against a stub endpoint, doors, placed blocks
+./gradlew :26.2:runGameTest         # 109 headless server tests: body, tools, settings, Builder fill/undo, God rain/sequence/rules, command boundary, Sparks config, AI label, one mind against a stub endpoint, doors, placed blocks
 ./gradlew :26.2:runClientGameTest   # real client: summon, skin, chat, settings, model list, menu, monitor, memories, create companion/builder/god by clicks, screenshots
 ./gradlew :26.2:runServer           # dedicated dev server in run/ (port 25599, offline mode)
 ./gradlew :26.2:runServer -PvoxelmindApi=http://127.0.0.1:8797/v1     # against a local `wrangler dev` VoxelMind API (also runClient, runGameTest)
