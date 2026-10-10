@@ -1,11 +1,13 @@
 package com.voxelmind.local.client;
 
+import com.voxelmind.local.VoxelMindLocal;
 import com.voxelmind.local.client.ui.Ui;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -45,7 +47,7 @@ public final class CompanionsScreen extends PanelScreen {
         Ui.divider(g, x, xr, y);
         y += 6;
 
-        int footerTop = bottom - PAD - 20 - 4 - 14;
+        int footerTop = bottom - PAD - 20 - 4 - 14 - 4 - 10;
         if (view == null) {
             Component wait = MenuState.serverHasMod() && !MenuState.noAnswer() ? tr("loading") : tr("no_mod");
             Ui.centered(g, font, wait, (left + right) / 2, (y + footerTop) / 2, Ui.TEXT_SECONDARY);
@@ -195,6 +197,26 @@ public final class CompanionsScreen extends PanelScreen {
             command("vml help");
         });
         button(g, x + 2 * (w + 4), ly, xr - x - 2 * (w + 4), 14, tr("close"), Ui.ButtonStyle.GHOST, this::onClose);
+        links(g, ly + 14 + 5);
+    }
+
+    /** Text links under the buttons, as in the original mod: feature requests on Discord, donations on Ko-fi. */
+    private void links(GuiGraphicsExtractor g, int y) {
+        Component[] labels = {tr("feature_request"), Component.empty().append(Component.literal("♥ ").withStyle(ChatFormatting.RED)).append(tr("support"))};
+        String[] urls = {VoxelMindLocal.FEATURE_REQUEST_URL, VoxelMindLocal.SUPPORT_URL};
+        int sep = 14;
+        int total = sep * (labels.length - 1);
+        for (Component l : labels) total += font.width(l);
+        int x = (left + right - total) / 2;
+        for (int i = 0; i < labels.length; i++) {
+            int w = font.width(labels[i]);
+            boolean hover = hovered(x - 2, y - 2, w + 4, 12);
+            Ui.text(g, font, labels[i], x, y, hover ? Ui.TEXT_PRIMARY : Ui.TEXT_SECONDARY);
+            String url = urls[i];
+            if (hover) g.setComponentTooltipForNextFrame(font, List.of(Component.literal(url)), x, y + 14);
+            clicks.add(x - 2, y - 2, w + 4, 12, () -> Util.getPlatform().openUri(url));
+            x += w + sep;
+        }
     }
 
     @Override

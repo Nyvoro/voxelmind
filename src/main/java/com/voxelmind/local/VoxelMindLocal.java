@@ -16,6 +16,10 @@ import org.slf4j.LoggerFactory;
 public final class VoxelMindLocal implements ModInitializer {
     public static final String MOD_ID = "voxelmind_local";
     public static final Logger LOG = LoggerFactory.getLogger("VoxelMind Local");
+    /** Donations for the free mod; linked from the menu, /vml help and Mod Menu (fabric.mod.json). */
+    public static final String SUPPORT_URL = "https://ko-fi.com/voxelmind";
+    /** Discord invite into #voxelmind-feature-request; there is no feedback database any more. */
+    public static final String FEATURE_REQUEST_URL = "https://discord.gg/jRthVZV2uk";
 
     @Override
     public void onInitialize() {

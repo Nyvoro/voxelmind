@@ -16,6 +16,7 @@
 - **Files:** companion files and the config are written whole or not at all; a config the game cannot read is kept aside instead of being overwritten; world backups before a God or Builder session keep the newest three per world.
 - **Servers:** each player who is not the host or an operator can have 3 companions in the world at once (`maxCompanionsPerPlayer`); memory rewrites count against the shared request budget; a God's rule that fires every tick shows up as one counted line every 5 seconds.
 - **AI settings:** when VoxelMind, Player2 or OpenRouter does not answer, the settings say "could not check right now" instead of asking you to sign in again.
+- **Feature requests and support:** the menu, `/vml help` and Mod Menu link to the feature-request channel on Discord and to VoxelMind on Ko-fi.
 - The mod shows as **VoxelMind** with its icon in Mod Menu and launchers. If the old hosted VoxelMind mod is installed too, the pause-menu button of this one reads "♦ VoxelMind (new)".
 
 ## 0.4.0 (2026-10-09)

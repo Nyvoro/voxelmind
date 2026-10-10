@@ -266,7 +266,16 @@ public final class VmlCommand {
                 /vml endpoint openrouter|player2|voxelmind|ollama|lmstudio|<url> · /vml test · /vml reload
                 /vml forget <name>              delete it and its memory
                 Talk to it in normal chat; it hears you within 48 blocks.""");
+        ctx.getSource().sendSuccess(() -> link("voxelmind_local.help.feature_request", "[Feature request on Discord]", com.voxelmind.local.VoxelMindLocal.FEATURE_REQUEST_URL)
+                .append(" ").append(link("voxelmind_local.help.support", "[♥ Support VoxelMind on Ko-fi]", com.voxelmind.local.VoxelMindLocal.SUPPORT_URL)), false);
         return 1;
+    }
+
+    private static MutableComponent link(String key, String fallback, String url) {
+        return Component.translatableWithFallback(key, fallback).withStyle(style -> style
+                .withColor(ChatFormatting.AQUA).withUnderlined(true)
+                .withClickEvent(new ClickEvent.OpenUrl(java.net.URI.create(url)))
+                .withHoverEvent(new HoverEvent.ShowText(Component.literal(url))));
     }
 
     private static int summon(CommandContext<CommandSourceStack> ctx, String character, String kind) throws CommandSyntaxException {

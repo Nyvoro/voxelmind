@@ -72,6 +72,8 @@
   "voxelmind_local.menu.ai_settings": "KI-Einstellungen",
   "voxelmind_local.menu.commands": "Befehle",
   "voxelmind_local.menu.close": "Schließen",
+  "voxelmind_local.menu.feature_request": "Feature-Wunsch",
+  "voxelmind_local.menu.support": "Unterstütze uns auf Ko-fi",
   "voxelmind_local.menu.status.away": "weg",
   "voxelmind_local.menu.status.arriving": "kommt",
   "voxelmind_local.menu.status.dead": "respawnt",
@@ -244,5 +246,9 @@
   "voxelmind_local.sparks.account.hover": "Guthaben, Verbrauch pro Tag und Gutschriften. Ein privater Link: Er enthält deine Anmeldung.",
   "voxelmind_local.sparks.copy": "[Token für einen Server kopieren]",
   "voxelmind_local.sparks.redeemed": "%s Sparks wurden dem Konto von %s gutgeschrieben. /vml sparks zeigt den Stand.",
-  "voxelmind_local.settings.account.unreachable": "Gerade nicht prüfbar: %s"
+  "voxelmind_local.settings.account.unreachable": "Gerade nicht prüfbar: %s",
+  "voxelmind_local.help.feature_request": "[Feature-Wunsch auf Discord]",
+  "voxelmind_local.help.support": "[♥ VoxelMind auf Ko-fi unterstützen]",
+  "voxelmind_local.modmenu.feature_request": "Feature-Wunsch",
+  "voxelmind_local.modmenu.support": "Auf Ko-fi unterstützen"
 }

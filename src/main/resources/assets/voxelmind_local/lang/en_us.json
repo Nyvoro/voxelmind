@@ -72,6 +72,8 @@
   "voxelmind_local.menu.ai_settings": "AI settings",
   "voxelmind_local.menu.commands": "Commands",
   "voxelmind_local.menu.close": "Close",
+  "voxelmind_local.menu.feature_request": "Feature request",
+  "voxelmind_local.menu.support": "Support us on Ko-fi",
   "voxelmind_local.menu.status.away": "away",
   "voxelmind_local.menu.status.arriving": "arriving",
   "voxelmind_local.menu.status.dead": "respawning",
@@ -244,5 +246,9 @@
   "voxelmind_local.sparks.account.hover": "Balance, spending per day and credits. A private link: it contains your sign-in.",
   "voxelmind_local.sparks.copy": "[Copy token for a server]",
   "voxelmind_local.sparks.redeemed": "%s Sparks were added to the account of %s. /vml sparks shows the balance.",
-  "voxelmind_local.settings.account.unreachable": "Could not check right now: %s"
+  "voxelmind_local.settings.account.unreachable": "Could not check right now: %s",
+  "voxelmind_local.help.feature_request": "[Feature request on Discord]",
+  "voxelmind_local.help.support": "[♥ Support VoxelMind on Ko-fi]",
+  "voxelmind_local.modmenu.feature_request": "Feature request",
+  "voxelmind_local.modmenu.support": "Support on Ko-fi"
 }

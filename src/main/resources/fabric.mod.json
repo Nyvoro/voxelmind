@@ -13,6 +13,14 @@
     "issues": "https://discord.gg/gtJV3XgDWy"
   },
   "license": "MIT",
+  "custom": {
+    "modmenu": {
+      "links": {
+        "voxelmind_local.modmenu.feature_request": "https://discord.gg/jRthVZV2uk",
+        "voxelmind_local.modmenu.support": "https://ko-fi.com/voxelmind"
+      }
+    }
+  },
   "environment": "*",
   "entrypoints": {
     "main": [
