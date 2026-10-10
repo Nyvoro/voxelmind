@@ -42,7 +42,7 @@ const CHAT_WAKE = /\bchat\b|whisper/i;
 
 const SYSTEM = `You check whether one chat line of an AI companion in Minecraft agrees with what its body did.
 The companion has a player body it controls only through tool calls (go_to, follow, explore, gather, mine_block, dig, collect, craft, smelt, place_block, place_blocks, build_shelter, drop, eat, equip, attack, use_chest, sleep, survey, stop, wait, keep_current_action, or similar). Speaking changes nothing in the world.
-You get the line (sent as a say call, or as the say argument of the body call it came with), the body decision taken in the same decision round, body decisions shortly before it, and the body decisions logged in the following seconds, each with what woke that round (e.g. "result of gather (done)" means a gather ended with outcome done; "chat from X" means X said something). When they were logged you also get the owner's chat, the running body action and result rows.
+You get the line (sent as a say call, or as the say argument of the body call it came with), the body decision taken in the same decision round, body decisions shortly before it, and the body decisions logged in the following seconds, each with what woke that round (e.g. "result of gather (done)" means a gather ended with outcome done; "chat from X" means X said something). When they were logged you also get the owner's chat, the running body action, result rows and earlier results the companion remembers.
 
 Give the line exactly one label:
 - consistent: the line says something about its own body (what it does now, will do, or has done) and the decisions and results agree with it. A started action counts even if it later fails. keep_current_action or "already running" keeps the running action going.
@@ -285,11 +285,20 @@ function buildRounds(entries) {
 const UNIT = { s: 1, m: 60, h: 3600, d: 86400 };
 
 function promptFacts(prompt) {
-  const out = { bodyAction: '', lastAction: '', chats: [], results: [] };
+  const out = { bodyAction: '', lastAction: '', chats: [], results: [], remembered: [] };
   if (!prompt) return out;
   for (const l of prompt.split('\n')) {
     if (l.startsWith('BODY ACTION: ')) out.bodyAction = l.slice(13);
     else if (l.startsWith('LAST ACTION: ')) out.lastAction = l.slice(13);
+  }
+  // Results older than the timeline, kept in [PREVIOUSLY]: "- The use_block tool reported ... (result, 2026-10-10T16:26:05.880Z)."
+  const prev = prompt.indexOf('[PREVIOUSLY]');
+  if (prev >= 0) {
+    const next = prompt.indexOf('\n[', prev + 1);
+    for (const l of prompt.slice(prev, next < 0 ? undefined : next).split('\n')) {
+      const m = /^- (.*) \(result, (\d{4}-\d\d-\d\dT[\d:.]+Z)\)\.?$/.exec(l);
+      if (m) out.remembered.push({ at: Date.parse(m[2]), text: m[1] });
+    }
   }
   const start = prompt.lastIndexOf('[TIMELINE]');
   if (start < 0) return out;
@@ -382,6 +391,7 @@ function collectItems(rounds, ownerSays) {
       owner, bodyAction: facts.bodyAction, lastAction: facts.lastAction,
       // Every result row the companion itself had in [TIMELINE] when it spoke: a claim about earlier work is judged on that.
       resultsBefore: facts.results.slice(-20).map((x) => ({ ago: x.age, text: shortResult(x.text) })),
+      remembered: facts.remembered.slice(-12).map((x) => ({ ago: Math.round((r.launch - x.at) / 1000), text: clip(x.text, 240) })),
       resultsAfter: resultsAfter.slice(0, 12), promptsLogged: r.prompts.length > 0,
     });
   });
@@ -403,6 +413,10 @@ function judgeInput(it) {
   }
   if (it.bodyAction) L.push('', `Body action when the round started: ${clip(it.bodyAction, 300)}`);
   if (it.lastAction) L.push(`Last finished action: ${clip(it.lastAction, 300)}`);
+  if (it.remembered && it.remembered.length) {
+    L.push('', 'Earlier results the companion remembers (from its memory, older than its timeline):');
+    for (const x of it.remembered) L.push(`  ${x.ago}s before: ${x.text}`);
+  }
   if (it.resultsBefore.length) {
     L.push('', 'Result rows the companion had seen before the round (from its own timeline):');
     for (const x of it.resultsBefore) L.push(`  ${x.ago}s before: ${x.text}`);
