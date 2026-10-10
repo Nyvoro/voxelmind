@@ -4,6 +4,7 @@ import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.world.Inv;
 import com.voxelmind.local.world.Names;
+import com.voxelmind.local.world.Placed;
 import com.voxelmind.local.world.Resources;
 import com.voxelmind.local.world.Targets;
 import net.minecraft.core.BlockPos;
@@ -57,7 +58,8 @@ public final class GatherAction extends BodyAction {
         }
         start = Inv.snapshot(ctx.body());
         if (resource.blocks() != null && resource.needsTool()) {
-            BlockPos sample = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), resource.blocks(), SEARCH);
+            BlockPos sample = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(),
+                    (p, st) -> resource.blocks().test(st) && !Placed.isPlaced(ctx.level(), p), SEARCH);
             if (sample != null) {
                 BlockState state = ctx.level().getBlockState(sample);
                 if (!canHarvest(ctx.body(), state)) {
@@ -138,9 +140,10 @@ public final class GatherAction extends BodyAction {
 
         if (resource.blocks() != null) {
             BlockPos next = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(),
-                    (p, st) -> resource.blocks().test(st) && !skip.contains(p.asLong()) && Resources.exposed(ctx.level(), p), SEARCH);
+                    (p, st) -> resource.blocks().test(st) && !skip.contains(p.asLong()) && Resources.exposed(ctx.level(), p)
+                            && !Placed.isPlaced(ctx.level(), p), SEARCH);
             if (next == null) {
-                stopPartial(ctx, counts, "no more exposed " + resource.label() + " within " + SEARCH + " blocks");
+                stopPartial(ctx, counts, "no more exposed " + resource.label() + " within " + SEARCH + " blocks that no player placed");
                 return;
             }
             breaker = new BlockBreaker(ctx, nav, next);

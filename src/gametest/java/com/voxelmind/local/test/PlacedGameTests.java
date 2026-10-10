@@ -261,6 +261,38 @@ public class PlacedGameTests {
         });
     }
 
+    @GameTest(maxTicks = 1200)
+    public void gatherLeavesPlacedLogsAndTakesNaturalOnes(GameTestHelper helper) {
+        floor(helper);
+        // A placed cherry log wall right next to the body, a natural cherry log column across the floor. Cherry logs, so
+        // logs of neighbouring tests are no candidates.
+        for (int z = 1; z <= 3; z++) for (int y = 1; y <= 2; y++) placedBy(helper, new BlockPos(2, y, z), Blocks.CHERRY_LOG.defaultBlockState(), GASADE, "Gasade");
+        for (int y = 1; y <= 3; y++) natural(helper, new BlockPos(7, y, 7), Blocks.CHERRY_LOG.defaultBlockState());
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 2));
+        BodyAction action = run(helper, body, new com.voxelmind.local.action.GatherAction("gather(cherry_log,2)", "cherry_log", 2));
+        finishWhen(helper, body, () -> {
+            assertDone(helper, action);
+            for (int z = 1; z <= 3; z++) for (int y = 1; y <= 2; y++) {
+                helper.assertBlockPresent(Blocks.CHERRY_LOG, new BlockPos(2, y, z));
+            }
+            helper.assertTrue(body.getInventory().countItem(Items.CHERRY_LOG) >= 2, "two natural logs gathered: " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 200)
+    public void mineBlockByTypeOnlyTakesBlocksNoPlayerPlaced(GameTestHelper helper) {
+        floor(helper);
+        placedBy(helper, new BlockPos(4, 1, 4), Blocks.MANGROVE_LOG.defaultBlockState(), GASADE, "Gasade");
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 1));
+        BodyAction action = run(helper, body, new MineBlockAction("mine_block(mangrove_log)", "mangrove_log"));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(action.finished() && action.outcome() == BodyAction.Outcome.FAILED, "mine_block by type failed: " + action.result());
+            helper.assertTrue(action.result().contains("that no player placed") && action.result().contains("was placed by Gasade")
+                    && action.result().contains(abs(helper, 4, 1, 4).replace(' ', ',')), action.result());
+            helper.assertBlockPresent(Blocks.MANGROVE_LOG, new BlockPos(4, 1, 4));
+        });
+    }
+
     @GameTest(maxTicks = 100, skyAccess = true)
     public void sensoryStatesThePlacedRoofFloorAndDoor(GameTestHelper helper) {
         floor(helper);

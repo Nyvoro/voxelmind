@@ -1,6 +1,7 @@
 package com.voxelmind.local.action;
 
 import com.voxelmind.local.world.Names;
+import com.voxelmind.local.world.Placed;
 import com.voxelmind.local.world.Resources;
 import com.voxelmind.local.world.Targets;
 import net.minecraft.core.BlockPos;
@@ -25,14 +26,19 @@ public final class MineBlockAction extends BodyAction {
                 failed("'" + targetText + "' is neither coordinates nor a block name");
                 return;
             }
-            // Prefer one you can see; otherwise the nearest one, digging through what is in the way.
+            // Prefer one you can see; otherwise the nearest one, digging through what is in the way. A block of the type
+            // means one from the world: blocks a player placed are only mined when named by their coordinates.
             pos = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(),
-                    (p, s) -> s.is(block) && Resources.exposed(ctx.level(), p), Targets.BLOCK_RANGE);
+                    (p, s) -> s.is(block) && Resources.exposed(ctx.level(), p) && !Placed.isPlaced(ctx.level(), p), Targets.BLOCK_RANGE);
             if (pos == null) {
-                pos = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), s -> s.is(block), Targets.BLOCK_RANGE);
+                pos = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(),
+                        (p, s) -> s.is(block) && !Placed.isPlaced(ctx.level(), p), Targets.BLOCK_RANGE);
             }
             if (pos == null) {
-                failed("no " + Names.id(block) + " within " + Targets.BLOCK_RANGE + " blocks");
+                BlockPos placed = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), s -> s.is(block), Targets.BLOCK_RANGE);
+                failed("no " + Names.id(block) + " within " + Targets.BLOCK_RANGE + " blocks that no player placed"
+                        + (placed == null ? "" : "; the nearest one, at " + Names.pos(placed) + ", was placed by " + Placed.placer(ctx.level(), placed)
+                        + " (mine_block with its coordinates mines exactly that block)"));
                 return;
             }
         }
