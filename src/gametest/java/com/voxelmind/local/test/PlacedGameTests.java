@@ -328,9 +328,17 @@ public class PlacedGameTests {
             helper.assertTrue("Gasade".equals(loaded.name(GASADE)) && "Lysa".equals(loaded.name(LYSA)), "placer names");
             helper.assertTrue(loaded.entry(Level.NETHER, new BlockPos(10, 64, -5)) == null, "dimensions stay apart");
 
-            // A file cut off in the middle and a file that is not ours: kept aside, the index starts empty, and saving works again.
+            // A file cut off in the middle, a file that is not ours and a damaged palette count with nothing behind it:
+            // kept aside, the index starts empty, and saving works again.
             byte[] whole = Files.readAllBytes(file);
-            for (byte[] bad : new byte[][]{java.util.Arrays.copyOf(whole, whole.length / 2), "not a placed file".getBytes(StandardCharsets.UTF_8)}) {
+            java.io.ByteArrayOutputStream damaged = new java.io.ByteArrayOutputStream();
+            try (java.io.DataOutputStream out = new java.io.DataOutputStream(new java.util.zip.GZIPOutputStream(damaged))) {
+                out.writeInt(0x564D4C50);
+                out.writeInt(1);
+                out.writeInt(100_000_000);
+            }
+            for (byte[] bad : new byte[][]{java.util.Arrays.copyOf(whole, whole.length / 2), "not a placed file".getBytes(StandardCharsets.UTF_8),
+                    damaged.toByteArray()}) {
                 Files.write(file, bad);
                 Placed broken = new Placed(file);
                 broken.load();

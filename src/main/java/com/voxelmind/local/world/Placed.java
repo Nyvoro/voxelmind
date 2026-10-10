@@ -27,6 +27,8 @@ import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -252,20 +254,24 @@ public final class Placed {
         names.clear();
         dirty = false;
         if (!Files.exists(file)) return;
-        try (DataInputStream in = new DataInputStream(new BufferedInputStream(new GZIPInputStream(Files.newInputStream(file))))) {
+        // The raw stream is a resource of its own: a file that is not GZIP fails in the GZIPInputStream constructor.
+        try (InputStream raw = Files.newInputStream(file);
+             DataInputStream in = new DataInputStream(new BufferedInputStream(new GZIPInputStream(raw)))) {
             if (in.readInt() != MAGIC) throw new IOException("not a placed-blocks file");
             int version = in.readInt();
             if (version != VERSION) throw new IOException("unknown version " + version);
-            Block[] blocks = new Block[count(in)];
-            for (int i = 0; i < blocks.length; i++) {
+            // Palettes grow while they are read: a damaged count must not allocate before the data runs out.
+            List<Block> blocks = new ArrayList<>();
+            for (int i = 0, n = count(in); i < n; i++) {
                 Identifier id = Identifier.tryParse(in.readUTF());
                 // A block id this game does not know (a removed mod) can never match the world again.
-                blocks[i] = id == null ? null : BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+                blocks.add(id == null ? null : BuiltInRegistries.BLOCK.getOptional(id).orElse(null));
             }
-            UUID[] placers = new UUID[count(in)];
-            for (int i = 0; i < placers.length; i++) {
-                placers[i] = new UUID(in.readLong(), in.readLong());
-                names.put(placers[i], in.readUTF());
+            List<UUID> placers = new ArrayList<>();
+            for (int i = 0, n = count(in); i < n; i++) {
+                UUID placer = new UUID(in.readLong(), in.readLong());
+                placers.add(placer);
+                names.put(placer, in.readUTF());
             }
             int dimensionCount = count(in);
             for (int d = 0; d < dimensionCount; d++) {
@@ -277,8 +283,8 @@ public final class Placed {
                     int x = in.readInt();
                     int y = in.readInt();
                     int z = in.readInt();
-                    Block block = blocks[in.readInt()];
-                    UUID placer = placers[in.readInt()];
+                    Block block = blocks.get(in.readInt());
+                    UUID placer = placers.get(in.readInt());
                     long at = in.readLong();
                     if (block != null) cells.put(BlockPos.asLong(x, y, z), new Entry(block, placer, at));
                 }
@@ -316,7 +322,8 @@ public final class Placed {
         Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         try {
             Files.createDirectories(file.getParent());
-            try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(tmp))))) {
+            try (OutputStream raw = Files.newOutputStream(tmp);
+                 DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new GZIPOutputStream(raw)))) {
                 out.writeInt(MAGIC);
                 out.writeInt(VERSION);
                 out.writeInt(blockIds.size());
