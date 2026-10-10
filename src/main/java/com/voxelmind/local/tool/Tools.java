@@ -249,7 +249,8 @@ public final class Tools {
         if (sayArgument) {
             parameters = parameters.deepCopy();
             JsonObject properties = parameters.getAsJsonObject("properties");
-            properties.add(SAY_ARGUMENT, str("Optional: one chat line you say as you make this call (max 256 characters)."));
+            properties.add(SAY_ARGUMENT, str("Optional: one chat line, sent the moment this call starts, before the call has any result; its "
+                    + "result comes back later as a fact (max 256 characters)."));
             properties.add(SAY_TO_ARGUMENT, str("Optional: who hears the say line: left out, the players within 48 blocks; \"everyone\": "
                     + "all players online; a player's name or \"owner\": only that player (a whisper)."));
         }

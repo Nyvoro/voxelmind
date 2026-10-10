@@ -255,6 +255,10 @@ public class MindGameTests {
      * deadline the cleanup runs anyway, so a failing test does not leave the global config on the stub.
      */
     private static void expect(GameTestHelper helper, ServerPlayer owner, Companion c, Runnable check) {
+        expect(helper, owner, c, MAX_TICKS, check);
+    }
+
+    private static void expect(GameTestHelper helper, ServerPlayer owner, Companion c, int maxTicks, Runnable check) {
         long until = System.currentTimeMillis() + DEADLINE_MS;
         boolean[] closed = {false};
         String[] last = {"nothing checked yet"};
@@ -270,7 +274,7 @@ public class MindGameTests {
             releaseStub();
         };
         helper.succeedWhen(() -> {
-            if (closed[0] || System.currentTimeMillis() > until || helper.getTick() >= MAX_TICKS - 20) {
+            if (closed[0] || System.currentTimeMillis() > until || helper.getTick() >= maxTicks - 20) {
                 close.run();
                 helper.fail("the decision was not carried out in time; last check: " + last[0]);
             }
@@ -738,7 +742,10 @@ public class MindGameTests {
         });
     }
 
-    @GameTest(maxTicks = MAX_TICKS)
+    /** The idle test waits up to a minute of real time; servers that tick unthrottled pass 100,000 ticks before that. */
+    private static final int IDLE_TEST_TICKS = 5_000_000;
+
+    @GameTest(maxTicks = IDLE_TEST_TICKS)
     public void anIdleBodyGetsItsNextQuietMomentWithinAMinute(GameTestHelper helper) throws IOException {
         floor(helper);
         useStub();
@@ -751,7 +758,7 @@ public class MindGameTests {
         ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
         Companion c = summon(helper, owner, completion(call("say", "text", "Hi there.")));
         c.hear(owner.getGameProfile().name(), true, "Hello!", "public");
-        expect(helper, owner, c, () -> {
+        expect(helper, owner, c, IDLE_TEST_TICKS, () -> {
             boolean timer = decisionLog(c).stream().anyMatch(l -> l.contains("a quiet moment (timer)"));
             helper.assertTrue(timer, "no quiet moment yet for the idle body");
             config.idleWakeMinSeconds = minBefore;

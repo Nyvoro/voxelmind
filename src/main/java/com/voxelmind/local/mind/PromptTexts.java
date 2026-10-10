@@ -51,7 +51,7 @@ public final class PromptTexts {
                 + "running too; wait starts a new wait and keeps the [BODY ACTION]; stop and every other body tool end both." : "";
         return "[DECISION]\nYou are an AI player embodied in Minecraft. Decide from the world facts, conversation, available tools and your "
                 + "character what to do and what, if anything, to say.\n\nCall the tools you choose in this one response: at most one body "
-                + "tool, whose optional say argument is spoken as you make the call, or say to speak without a body tool (one line per "
+                + "tool, whose optional say argument is sent the moment the call starts, before its result, or say to speak without a body tool (one line per "
                 + "decision)." + continuity + " Your response takes effect only through its tool calls: one without any tool call changes "
                 + "nothing, says nothing and is asked once more. Only say and say arguments are heard; other text you write is not.";
     }
