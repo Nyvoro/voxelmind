@@ -73,3 +73,20 @@ A scenario is a JSON list; the keys of a step run in this order: `wait` (ms), `a
 - `chat` placeholders: `{c}` companion, `{owner}` the bot, `{at:dx,dy,dz}` the absolute `x y z` at that offset from the anchor.
 - `build`: `{"name", "clear": true | [x1,y1,z1,x2,y2,z2], "parts": [{"fill"|"walls": [x1,y1,z1,x2,y2,z2], "block"}, {"door": [x,y,z], "block", "facing"}], "by": "hand"|"command"}` in anchor offsets; later parts override earlier ones, `air` removes, a door takes two cells. By hand the bot gives itself the blocks, stands two blocks outside each side (`/tp`), places bottom-up from the outer ring inwards, and uses `/setblock` where a placement does not land (after 8 misses in a row for the rest).
 - `check`: `"build": "<name>"` compares every block and door with that build, `"cells": [[x,y,z], ...]` names the blocks there, `"companion": true` logs its position relative to the anchor, `"find": {"block", "near": [x,y,z], "radius"}` lists blocks of a type near a point; `"label"` prefixes the line.
+
+## Results 10.10.2026 (DeepSeek V4 Flash via Relace/Sail/Together unless noted; judge Sonnet 5.5)
+
+World checks (the hard signal):
+
+| Scenario | 0.4.1 (two lanes) | 0.4.2 (one mind, doors, placed facts) |
+|---|---|---|
+| 10 patch a hole | patched after 170 s, house 96/96 | patched after 170 s, house 96/96; gpt-oss-120b the same |
+| 11 house with a door | left by **breaking two wall blocks** (94/96), door never used; promised to close the door without any tool for it, then claimed a try that never happened | out and in through the door in all three runs, house 96/96, door closed at the end; DeepSeek twice called the doorway "inside" (from honest results, a model error), gpt-oss went in correctly |
+| 12 mine from the house | **dug down through the floor** (95/96), drowned twice, claimed iron it never mined | left through the door, house 96/96 in both runs; drowned once in the first run, before the water fact |
+| 13 plan under chatter | plan recalled, step 2 done | plan recalled, step 2 done (both runs) |
+
+say-do.cjs (lines that imply a body action and disagree with the decisions): 0.4.1 7/29 (24 %, re-judged with the current script); 0.4.2 7/26 (27 %) in the after-run and 4/15 in the final run of 11 and 13; gpt-oss-120b 1/8. Contradictions (saying one thing while doing another) fell from 4 to 1-2; announcements in chatty replies without an action ("then off to look for iron" after "don't start yet") rose in scenario 13. With one or two dozen lines per run the judge varies by a few lines between runs.
+
+## Formats since 0.4.2
+
+One-entry logs carry `said` and `heard_by`, the line that went out. For older logs say-do takes the first line in call order the way Mind sends it: the first say call, or the say argument of the first body call. A superseded, error or no-tool-call round, an extra say and the say argument of a skipped call give no line. In the old two-lane format only the first call of a speech entry counts. The sample now has 14 chat-woken lines with `_expect` labels (say argument with go_to, explore contradiction, keep_current_action, wait, two says, invalid dig plus retry); the judge validation on it was last run before these six were added.
