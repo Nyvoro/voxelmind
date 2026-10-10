@@ -4,11 +4,13 @@ import com.mojang.authlib.GameProfile;
 import com.voxelmind.local.action.ActionContext;
 import com.voxelmind.local.action.BodyAction;
 import com.voxelmind.local.action.ChestAction;
+import com.voxelmind.local.action.FollowAction;
 import com.voxelmind.local.action.GoToAction;
 import com.voxelmind.local.action.UseBlockAction;
 import com.voxelmind.local.body.CompanionConnection;
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Navigator;
+import com.voxelmind.local.mind.Sensory;
 import com.voxelmind.local.world.Inv;
 import com.voxelmind.local.world.Names;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -602,6 +604,36 @@ public class DoorGameTests {
             helper.assertTrue(opened[0], "the door was never opened; " + action.result());
             helper.assertTrue(at(helper, body).getX() <= 3, "ended at " + at(helper, body) + ", not inside; " + action.result());
             helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
+            assertRoomIntact(helper);
+        });
+    }
+
+    @GameTest(maxTicks = 100, skyAccess = true)
+    public void sensoryNamesWhatIsAboveEachSideOfADoor(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(7, 1, 2));
+        String east = Names.pos(helper.absolutePos(DOOR.east()));
+        String west = Names.pos(helper.absolutePos(DOOR.west()));
+        int roof = helper.absolutePos(new BlockPos(3, 3, 2)).getY();
+        finishWhen(helper, body, () -> {
+            String text = Sensory.render(body, UUID.randomUUID(), "Owner", "", "");
+            helper.assertTrue(text.contains(", closed (east side " + east + ": under open sky; west side " + west + ": under oak_planks at y=" + roof + ")"), text);
+        });
+    }
+
+    @GameTest(maxTicks = 600)
+    public void followingSomeoneInsideGoesThroughTheDoorAndClosesIt(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        Entity stand = helper.spawn(EntityTypes.ARMOR_STAND, new BlockPos(1, 1, 2));
+        CompanionPlayer body = spawn(helper, new BlockPos(7, 1, 2));
+        boolean[] opened = watchOpen(helper, DOOR);
+        BodyAction action = run(helper, body, new FollowAction("follow(stand)", "#" + stand.getId()));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(opened[0], "the door was never opened; " + action.progress());
+            helper.assertTrue(at(helper, body).getX() <= 3, "still not inside at " + at(helper, body) + "; " + action.progress());
+            helper.assertFalse(isOpen(helper, DOOR), "the door was left open behind the body; " + action.progress());
             assertRoomIntact(helper);
         });
     }

@@ -336,6 +336,22 @@ public class MindGameTests {
         }
     }
 
+    /** An action whose tick kills the body, as a bed exploding under a use_block does. */
+    private static final class Deadly extends BodyAction {
+        Deadly() {
+            super("deadly", "deadly()");
+        }
+
+        @Override
+        protected void onStart(ActionContext ctx) {
+        }
+
+        @Override
+        protected void onTick(ActionContext ctx) {
+            if (ctx.body().isAlive()) ctx.body().kill(ctx.level());
+        }
+    }
+
     // ---- one decision per wake ----
 
     @GameTest(maxTicks = MAX_TICKS)
@@ -703,6 +719,22 @@ public class MindGameTests {
             helper.assertTrue(requests(c) == 2, "the stopped action woke the next decision, got " + requests(c));
             helper.assertTrue(sent(c, "All still now.") != null, "the next decision was carried out");
             helper.assertTrue(PROMPTS.get(c.name()).get(1).contains("You last spoke "), "the next prompt says when the companion last spoke");
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aBodyDyingInItsOwnActionTickEndsTheActionOnce(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion(call("say", "text", "Back again.")));
+        Deadly deadly = new Deadly();
+        c.startAction(deadly);
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(deadly.finished(), "the deadly action ended");
+            long rows = c.state.timeline.last(Timeline.KEEP).stream().filter(e -> e.kind.equals("result") && e.text.startsWith("deadly()")).count();
+            helper.assertTrue(rows == 1, "its result was recorded once, got " + rows);
+            helper.assertTrue(sent(c, "Back again.") != null, "the companion decided again after respawning");
         });
     }
 
