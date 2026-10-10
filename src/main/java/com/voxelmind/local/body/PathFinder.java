@@ -37,6 +37,11 @@ import java.util.function.Predicate;
 public final class PathFinder {
     private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
     public static final int MAX_DROP = 3;
+    /**
+     * Steps in a row with the head under water that a route may take: a body holds its breath about 15 seconds, so a
+     * longer dive drowns it on the way, the way a fall of more than MAX_DROP hurts it.
+     */
+    public static final int MAX_UNDER_WATER = 12;
     private static final double BLOCKED = Double.MAX_VALUE;
     /** Extra cost per closed door half or gate on a step: the body stops and opens it first. */
     private static final double CLOSED_DOOR = 1.0;
@@ -75,6 +80,8 @@ public final class PathFinder {
         double f;
         Node parent;
         boolean closed;
+        /** Steps in a row up to here with the head under water. */
+        int underWater;
 
         Node(BlockPos pos) {
             this.pos = pos;
@@ -104,6 +111,7 @@ public final class PathFinder {
         PriorityQueue<Node> open = new PriorityQueue<>();
         Node first = new Node(start);
         first.g = 0;
+        first.underWater = headUnderWater(level, start) ? 1 : 0;
         first.f = heuristic(start, target);
         nodes.put(start.asLong(), first);
         open.add(first);
@@ -132,11 +140,14 @@ public final class PathFinder {
                     nodes.put(step.pos.asLong(), next);
                 }
                 if (next.closed) continue;
+                int underWater = headUnderWater(level, step.pos) ? current.underWater + 1 : 0;
+                if (underWater > MAX_UNDER_WATER) continue;
                 double g = current.g + step.cost;
                 if (g < next.g) {
                     next.g = g;
                     next.f = g + heuristic(step.pos, target);
                     next.parent = current;
+                    next.underWater = underWater;
                     open.add(next);
                 }
             }
@@ -420,6 +431,11 @@ public final class PathFinder {
 
     public static boolean isWater(Level level, BlockPos pos) {
         return level.getFluidState(pos).is(FluidTags.WATER);
+    }
+
+    /** A body standing with its feet at {@code feet} has its head under water. */
+    public static boolean headUnderWater(Level level, BlockPos feet) {
+        return isWater(level, feet.above());
     }
 
     private static boolean isHazard(BlockState state) {

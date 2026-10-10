@@ -11,6 +11,7 @@ import com.voxelmind.local.action.PlaceBlockAction;
 import com.voxelmind.local.body.CompanionConnection;
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Hands;
+import com.voxelmind.local.body.PathFinder;
 import com.voxelmind.local.mind.Sensory;
 import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Placed;
@@ -386,6 +387,37 @@ public class PlacedGameTests {
             helper.assertTrue(action.outcome() == BodyAction.Outcome.DONE, action.call() + " ended " + action.outcome() + ": " + action.result());
             int head = body.blockPosition().getY() + 1;
             helper.assertTrue(head >= helper.absolutePos(new BlockPos(3, 4, 3)).getY(), "the head is still under water; " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 100)
+    public void noRouteDivesLongerThanABreath(GameTestHelper helper) {
+        floor(helper);
+        // A flooded serpentine two high under a stone roof: rows z=1, 3 and 5 joined at alternate ends, then a shaft up to
+        // open air. Swimming it through takes about 21 steps with the head under water.
+        for (int x = 0; x <= 7; x++) for (int z = 0; z <= 7; z++) {
+            natural(helper, new BlockPos(x, 3, z), Blocks.STONE.defaultBlockState());
+            for (int y = 1; y <= 2; y++) {
+                boolean row = x >= 1 && x <= 6 && (z == 1 || z == 3 || z == 5);
+                boolean gap = x == 6 && z == 2 || x == 1 && z == 4;
+                if (row || gap) helper.setBlock(new BlockPos(x, y, z), Blocks.WATER);
+                else natural(helper, new BlockPos(x, y, z), Blocks.STONE.defaultBlockState());
+            }
+        }
+        helper.setBlock(new BlockPos(6, 3, 5), Blocks.WATER);
+        for (BlockPos side : new BlockPos[]{new BlockPos(5, 4, 5), new BlockPos(7, 4, 5), new BlockPos(6, 4, 4), new BlockPos(6, 4, 6)}) {
+            natural(helper, side, Blocks.STONE.defaultBlockState());
+        }
+        helper.setBlock(new BlockPos(6, 4, 5), Blocks.WATER);
+        BlockPos start = helper.absolutePos(new BlockPos(1, 1, 1));
+        // The swimming spot at the top of the shaft, head in the open air; and a spot one breath into the serpentine.
+        BlockPos target = helper.absolutePos(new BlockPos(6, 4, 5));
+        BlockPos near = helper.absolutePos(new BlockPos(6, 1, 3));
+        helper.succeedWhen(() -> {
+            PathFinder.Result far = PathFinder.find(helper.getLevel(), start, target, p -> p.equals(target), 20_000);
+            helper.assertFalse(far.reachesGoal(), "a route dives the whole serpentine: " + far.path());
+            PathFinder.Result close = PathFinder.find(helper.getLevel(), start, near, p -> p.equals(near), 20_000);
+            helper.assertTrue(close.reachesGoal(), "a short dive within one breath has no route");
         });
     }
 
