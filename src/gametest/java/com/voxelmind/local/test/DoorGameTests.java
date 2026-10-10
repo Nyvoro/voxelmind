@@ -205,6 +205,32 @@ public class DoorGameTests {
     }
 
     @GameTest(maxTicks = 400)
+    public void goingToADoorwayEndsInItAndSaysSo(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(7, 1, 2));
+        BodyAction action = run(helper, body, new GoToAction("go_to(doorway)", abs(helper, DOOR.getX(), DOOR.getY(), DOOR.getZ())));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(at(helper, body).equals(DOOR), "a doorway target ends in the doorway, not next to it: " + at(helper, body) + "; " + action.result());
+            helper.assertTrue(action.result().startsWith("arrived at "), action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void goingToABlockSaysHowNearTheWalkEnded(GameTestHelper helper) {
+        floor(helper);
+        helper.setBlock(new BlockPos(2, 1, 2), Blocks.CHEST);
+        CompanionPlayer body = spawn(helper, new BlockPos(7, 1, 2));
+        BodyAction action = run(helper, body, new GoToAction("go_to(chest)", abs(helper, 2, 1, 2)));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(action.result().startsWith("stopped ") && action.result().contains(" blocks from "),
+                    "a walk that ends next to a block does not claim to have arrived at it: " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 400)
     public void walksOutOfAClosedRoomThroughItsDoor(GameTestHelper helper) {
         floor(helper);
         room(helper, Blocks.OAK_DOOR);

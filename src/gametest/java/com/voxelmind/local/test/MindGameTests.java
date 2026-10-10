@@ -438,16 +438,31 @@ public class MindGameTests {
     }
 
     @GameTest(maxTicks = MAX_TICKS)
-    public void plainTextNextToToolCallsIsNotedAsUnheard(GameTestHelper helper) throws IOException {
+    public void plainTextBesideASayIsNotNoted(GameTestHelper helper) throws IOException {
         floor(helper);
         useStub();
         ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        // Models think aloud beside their calls; when the decision spoke, that text is no unheard answer.
         Companion c = summon(helper, owner, completion("Let me think about where the corner is.", call("say", "text", "On my way.")));
         c.hear(owner.getGameProfile().name(), true, "Come to the corner.", "public");
         expect(helper, owner, c, () -> {
             helper.assertTrue(sent(c, "On my way.") != null, "the say call was sent");
-            helper.assertTrue(noted(c, "your plain text was not heard", "\"Let me think about where the corner is.\""), "the plain text is a note");
+            helper.assertFalse(noted(c, "your plain text was not heard"), "no note beside a spoken line");
             helper.assertTrue(sent(c, "Let me think") == null, "the plain text was not said");
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void plainTextOfADecisionThatSaidNothingIsNotedAsUnheard(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion("Sure, I'll come to the corner!", call("go_to", "target", abs(helper, 6, 1, 6))));
+        c.hear(owner.getGameProfile().name(), true, "Come to the corner.", "public");
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(started(c, "go_to"), "the body call ran");
+            helper.assertTrue(noted(c, "your plain text was not heard", "\"Sure, I'll come to the corner!\""), "the plain text is a note");
+            helper.assertTrue(sent(c, "Sure, I'll") == null, "the plain text was not said");
         });
     }
 

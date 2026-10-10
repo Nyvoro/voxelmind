@@ -171,15 +171,13 @@ public final class Mind {
             logCall(wokeBy, prompt, null, error, "error");
             return;
         }
-        // Text written next to the tool calls reaches no one; that it stayed unheard is a fact for the next decision.
+        // Text written next to the tool calls reaches no one. When the decision said nothing, that text may have been meant
+        // as an answer; that it stayed unheard is then a fact for the next decision.
         String text = response.content() == null ? "" : response.content().trim();
-        if (!text.isEmpty()) {
-            c.event("note", "your plain text was not heard; only say and say arguments reach players: \""
-                    + (text.length() > 200 ? text.substring(0, 200) + "…" : text) + "\"", false, null);
-        }
         List<LlmClient.ToolCall> calls = response.toolCalls();
         if (calls.isEmpty()) {
             // The endpoint ignored tool_choice=required. Nothing is executed or said; one technical retry follows.
+            noteUnheard(text);
             c.event("note", "your last decision contained no tool call, so nothing was executed or said", false, null);
             if (++invalidStreak <= 1) request("your last decision contained no tool call", 2000);
             logCall(wokeBy, prompt, response, null, "no tool call");
@@ -212,11 +210,18 @@ public final class Mind {
                 applied.add("say (" + speak(line.text(), line.mode(), line.target()) + ")");
             }
         }
+        if (said == null) noteUnheard(text);
         // An action that ended as it started is recorded after the decision's line, which was spoken as the call was made.
         c.recordIfFinished();
         // A decision that only speaks is complete too, so a later technical failure gets its one retry again.
         if (spoke && !acted) invalidStreak = 0;
         logCall(wokeBy, prompt, response, null, String.join(" + ", applied));
+    }
+
+    private void noteUnheard(String text) {
+        if (text.isEmpty()) return;
+        c.event("note", "your plain text was not heard; only say and say arguments reach players: \""
+                + (text.length() > 200 ? text.substring(0, 200) + "…" : text) + "\"", false, null);
     }
 
     /** Sends one line; "owner" names the owner for a whisper. Returns who heard it. */

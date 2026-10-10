@@ -2,6 +2,7 @@ package com.voxelmind.local.action;
 
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Navigator;
+import com.voxelmind.local.body.PathFinder;
 import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Targets;
 import net.minecraft.core.BlockPos;
@@ -55,9 +56,13 @@ public final class GoToAction extends BodyAction {
         } else {
             Targets.PosTarget pt = (Targets.PosTarget) target;
             BlockState state = ctx.level().getBlockState(pt.pos());
-            double radius = state.getCollisionShape(ctx.level(), pt.pos()).isEmpty() ? 1.2 : 2.5;
             startDistance = Math.sqrt(body.blockPosition().distSqr(pt.pos()));
-            nav.navigateNear(pt.pos(), radius);
+            if (PathFinder.isPassage(state)) {
+                // A doorway is a cell to stand in, not a block to stand next to: walking there means going through it.
+                nav.navigate(pt.pos(), p -> p.equals(pt.pos()));
+            } else {
+                nav.navigateNear(pt.pos(), state.getCollisionShape(ctx.level(), pt.pos()).isEmpty() ? 1.2 : 2.5);
+            }
         }
         checkNav();
     }
@@ -99,7 +104,12 @@ public final class GoToAction extends BodyAction {
                     nav.navigateNear(lastPlanned, 2.0);
                 }
             } else {
-                done("arrived at " + target.label() + "; standing at " + where + routeWork());
+                // "Arrived" only for the cell itself; near a block or a cell, the result says how near.
+                BlockPos goal = ((Targets.PosTarget) target).pos();
+                BlockPos at = ctx.body().blockPosition();
+                String reached = at.equals(goal) ? "arrived at " + target.label()
+                        : "stopped " + String.format(java.util.Locale.ROOT, "%.1f", Math.sqrt(at.distSqr(goal))) + " blocks from " + target.label();
+                done(reached + "; standing at " + where + routeWork());
             }
         } else if (nav.status() == Navigator.Status.FAILED) {
             failed("could not reach " + target.label() + ": " + nav.failure() + "; standing at " + Names.pos(ctx.body().blockPosition()));
