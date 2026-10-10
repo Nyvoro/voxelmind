@@ -1,0 +1,5 @@
+[
+  {"wait": 2000, "chat": "/vml endpoint openrouter"},
+  {"wait": 1500, "chat": "/vml status"},
+  {"wait": 4000}
+]

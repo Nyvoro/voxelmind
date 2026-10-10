@@ -1,0 +1,39 @@
+[
+  {"wait": 3000, "anchor": true, "note": "site: flat grass over dirt and stone, 21x21 blocks around the owner"},
+  {"wait": 300, "chat": "/time set 1000"},
+  {"wait": 300, "chat": "/weather clear"},
+  {"wait": 300, "chat": "/fill {at:-10,-12,-10} {at:10,-5,10} stone"},
+  {"wait": 300, "chat": "/fill {at:-10,-4,-10} {at:10,-2,10} dirt"},
+  {"wait": 300, "chat": "/fill {at:-10,-1,-10} {at:10,-1,10} grass_block"},
+  {"wait": 300, "chat": "/fill {at:-10,0,-10} {at:10,12,10} air"},
+  {"wait": 1500, "note": "the owner's closed plank house 3 blocks east: floor, walls 3 high, flat roof, oak door in the west wall", "build": {
+    "name": "house",
+    "clear": [3, -1, -2, 7, 3, 2],
+    "parts": [
+      {"fill": [3, -1, -2, 7, -1, 2], "block": "oak_planks"},
+      {"walls": [3, 0, -2, 7, 2, 2], "block": "oak_planks"},
+      {"fill": [3, 3, -2, 7, 3, 2], "block": "oak_planks"},
+      {"door": [3, 0, 0], "block": "oak_door", "facing": "east"}
+    ]
+  }},
+  {"wait": 500, "chat": "/clear {owner}"},
+  {"wait": 500, "note": "the owner stands outside, 3 blocks in front of the door", "chat": "/tp {owner} {at:0,0,0}"},
+  {"wait": 1000, "chat": "/vml summon {c} hilfsbereit, gesprächig und ein bisschen verspielt"},
+  {"wait": 1500, "chat": "/clear {c}"},
+  {"wait": 12000, "note": "the companion is put inside the closed house", "chat": "/tp {c} {at:5,0,0}"},
+  {"wait": 1500, "check": {"label": "start", "build": "house"}},
+  {"wait": 500, "check": {"label": "start (inside is rel x 4..6, z -1..1)", "companion": true}},
+  {"wait": 3000, "chat": "{c}, komm bitte mal raus zu mir! Ich stehe draußen vor der Haustür."},
+  {"wait": 90000, "check": {"label": "after come out", "companion": true}},
+  {"wait": 500, "check": {"label": "after come out", "build": "house"}},
+  {"wait": 500, "chat": "Okay. Und jetzt geh bitte wieder rein ins Haus."},
+  {"wait": 80000, "check": {"label": "after go back in", "companion": true}},
+  {"wait": 500, "check": {"label": "after go back in", "build": "house"}},
+  {"wait": 500, "chat": "Und mach bitte die Tür hinter dir zu."},
+  {"wait": 50000, "chat": "Ist die Tür jetzt zu?"},
+  {"wait": 40000, "check": {"label": "end", "build": "house"}},
+  {"wait": 500, "check": {"label": "end", "companion": true}},
+  {"wait": 500, "chat": "/vml list"},
+  {"wait": 1000, "chat": "/vml dismiss {c}"},
+  {"wait": 3000}
+]

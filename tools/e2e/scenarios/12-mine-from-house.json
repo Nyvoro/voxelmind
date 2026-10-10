@@ -1,0 +1,41 @@
+[
+  {"wait": 3000, "anchor": true, "note": "site: flat grass over dirt and stone, 21x21 blocks around the owner"},
+  {"wait": 300, "chat": "/time set 1000"},
+  {"wait": 300, "chat": "/weather clear"},
+  {"wait": 300, "chat": "/fill {at:-10,-12,-10} {at:10,-5,10} stone"},
+  {"wait": 300, "chat": "/fill {at:-10,-4,-10} {at:10,-2,10} dirt"},
+  {"wait": 300, "chat": "/fill {at:-10,-1,-10} {at:10,-1,10} grass_block"},
+  {"wait": 300, "chat": "/fill {at:-10,0,-10} {at:10,12,10} air"},
+  {"wait": 1500, "note": "the owner's plank house 3 blocks east: plank floor on the natural ground, walls 3 high, flat roof, oak door in the west wall", "build": {
+    "name": "house",
+    "clear": [3, -1, -2, 7, 3, 2],
+    "parts": [
+      {"fill": [3, -1, -2, 7, -1, 2], "block": "oak_planks"},
+      {"walls": [3, 0, -2, 7, 2, 2], "block": "oak_planks"},
+      {"fill": [3, 3, -2, 7, 3, 2], "block": "oak_planks"},
+      {"door": [3, 0, 0], "block": "oak_door", "facing": "east"}
+    ]
+  }},
+  {"wait": 500, "chat": "/clear {owner}"},
+  {"wait": 500, "note": "the owner stands inside the house", "chat": "/tp {owner} {at:4,0,-1}"},
+  {"wait": 1000, "chat": "/vml summon {c} hilfsbereit, gesprächig und ein bisschen verspielt"},
+  {"wait": 1500, "chat": "/clear {c}"},
+  {"wait": 500, "chat": "/give {c} stone_pickaxe 1"},
+  {"wait": 500, "chat": "/give {c} torch 16"},
+  {"wait": 500, "chat": "/give {c} bread 4"},
+  {"wait": 10000, "note": "the companion stands inside the house on its plank floor", "chat": "/tp {c} {at:6,0,1}"},
+  {"wait": 1500, "check": {"label": "start (inside is rel x 4..6, z -1..1, y 0)", "companion": true}},
+  {"wait": 2000, "chat": "{c}, lass uns Eisen abbauen gehen! Geh du schon mal vor, ich komme gleich nach."},
+  {"wait": 60000, "check": {"label": "after 60 s", "build": "house"}},
+  {"wait": 500, "check": {"label": "after 60 s", "companion": true}},
+  {"wait": 60000, "chat": "Wo bist du gerade?"},
+  {"wait": 60000, "check": {"label": "after 3 min", "build": "house"}},
+  {"wait": 500, "check": {"label": "after 3 min", "companion": true}},
+  {"wait": 500, "chat": "Hast du schon Eisen gefunden?"},
+  {"wait": 70000, "check": {"label": "end", "build": "house"}},
+  {"wait": 500, "check": {"label": "end", "companion": true}},
+  {"wait": 500, "chat": "/vml list"},
+  {"wait": 1000, "inventory": true},
+  {"wait": 1000, "chat": "/vml dismiss {c}"},
+  {"wait": 3000}
+]
