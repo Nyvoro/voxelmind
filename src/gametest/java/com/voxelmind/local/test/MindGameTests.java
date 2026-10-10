@@ -738,6 +738,27 @@ public class MindGameTests {
         });
     }
 
+    @GameTest(maxTicks = MAX_TICKS)
+    public void anIdleBodyGetsItsNextQuietMomentWithinAMinute(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        LocalConfig config = LocalConfig.get();
+        int minBefore = config.idleWakeMinSeconds;
+        int maxBefore = config.idleWakeMaxSeconds;
+        // Quiet moments set far apart: an idle body still gets one within a minute.
+        config.idleWakeMinSeconds = 200;
+        config.idleWakeMaxSeconds = 240;
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion(call("say", "text", "Hi there.")));
+        c.hear(owner.getGameProfile().name(), true, "Hello!", "public");
+        expect(helper, owner, c, () -> {
+            boolean timer = decisionLog(c).stream().anyMatch(l -> l.contains("a quiet moment (timer)"));
+            helper.assertTrue(timer, "no quiet moment yet for the idle body");
+            config.idleWakeMinSeconds = minBefore;
+            config.idleWakeMaxSeconds = maxBefore;
+        });
+    }
+
     // ---- conversation window ----
 
     private static Timeline.Event at(Timeline.Event e, long epochMs) {

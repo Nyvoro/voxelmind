@@ -25,6 +25,8 @@ import java.util.concurrent.ThreadLocalRandom;
  * to the next decision right after it was carried out.
  */
 public final class Mind {
+    private static final int IDLE_BODY_MIN_SECONDS = 20;
+    private static final int IDLE_BODY_MAX_SECONDS = 60;
     private final Companion c;
     private final Set<String> reasons = new LinkedHashSet<>();
     private boolean wanted;
@@ -107,10 +109,18 @@ public final class Mind {
         return owner != null && (minutes <= 0 || net.minecraft.util.Util.getMillis() - owner.getLastActionTime() < minutes * 60_000L);
     }
 
+    /**
+     * When the next quiet moment comes. A body with nothing running and no chosen wait produces no event of its own, so
+     * its next quiet moment comes within IDLE_BODY_MAX_SECONDS; otherwise the configured pace applies.
+     */
     private void scheduleIdle() {
         LocalConfig config = LocalConfig.get();
         int min = Math.max(10, config.idleWakeMinSeconds);
         int max = Math.max(min + 1, config.idleWakeMaxSeconds);
+        if (!c.actionRunning() && waitUntil == 0) {
+            min = Math.min(min, IDLE_BODY_MIN_SECONDS);
+            max = Math.max(min + 1, Math.min(max, IDLE_BODY_MAX_SECONDS));
+        }
         nextIdleAt = System.currentTimeMillis() + 1000L * ThreadLocalRandom.current().nextInt(min, max);
     }
 
@@ -213,6 +223,8 @@ public final class Mind {
         if (said == null) noteUnheard(text);
         // An action that ended as it started is recorded after the decision's line, which was spoken as the call was made.
         c.recordIfFinished();
+        // The pace of quiet moments follows what the body does after this decision.
+        scheduleIdle();
         // A decision that only speaks is complete too, so a later technical failure gets its one retry again.
         if (spoke && !acted) invalidStreak = 0;
         logCall(wokeBy, prompt, response, null, String.join(" + ", applied));
