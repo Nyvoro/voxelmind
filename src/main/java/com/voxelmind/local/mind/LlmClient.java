@@ -83,7 +83,7 @@ public final class LlmClient {
     }
 
     /**
-     * {@code reasoning}: null switches the model's reasoning off (the companion lanes, for latency);
+     * {@code reasoning}: null switches the model's reasoning off (the companion's decisions, for latency);
      * "on" or an effort like "low" lets it think before answering, as the hosted God and Builder did.
      */
     public static CompletableFuture<Response> chat(String model, JsonArray messages, @Nullable JsonArray tools,

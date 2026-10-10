@@ -194,7 +194,7 @@ public final class LocalConfig {
     }
 
     /**
-     * Switches both lanes and the memory rewrite to one model. The measured provider order only
+     * Switches the companion's decisions and the memory rewrite to one model. The measured provider order only
      * fits the default model, so any other model lets OpenRouter route on its own.
      */
     public void selectModel(String id) {

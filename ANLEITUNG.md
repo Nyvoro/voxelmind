@@ -102,7 +102,7 @@ Alles in normaler Sprache, sie entscheidet selbst, welche Werkzeuge sie nimmt:
 - „Zeus, mir ist langweilig, gib mir eine kleine Herausforderung“
 - Er antwortet nur über sein `say`; sein freier Text bleibt bei ihm, wie im gehosteten Original.
 
-Werkzeuge des Körpers: go_to, follow, explore, mine_block, gather, dig, collect, craft, smelt, collect_furnace, use_chest, attack, eat, equip, drop, place_block, place_blocks, build_shelter, survey, sleep, stop, wait. Sprache: say, stay_silent.
+Werkzeuge des Körpers: go_to, follow, explore, mine_block, gather, dig, collect, craft, smelt, collect_furnace, use_chest, use_block, attack, eat, equip, drop, place_block, place_blocks, build_shelter, survey, sleep, stop, wait. Sprechen: say, oder das optionale `say`-Argument eines Körper-Werkzeugs. Was er sagt und was er tut, entscheidet ein und derselbe Modellaufruf.
 
 ## Kosten und Tempo (gemessen am 07.10.)
 
