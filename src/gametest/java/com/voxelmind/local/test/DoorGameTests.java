@@ -230,7 +230,8 @@ public class DoorGameTests {
         finishWhen(helper, body, () -> {
             assertEnded(helper, action, BodyAction.Outcome.DONE);
             helper.assertTrue(at(helper, body).equals(DOOR.west()), "ended at " + at(helper, body) + ", not just past the door; " + action.result());
-            helper.assertTrue(action.result().startsWith("went through ") && action.result().contains("(under oak_planks at y="), action.result());
+            helper.assertTrue(action.result().startsWith("went through ") && action.result().contains("(under oak_planks at y=")
+                    && action.result().contains("; oak_door is closed now"), action.result());
             helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
             assertRoomIntact(helper);
         });
@@ -245,7 +246,8 @@ public class DoorGameTests {
         finishWhen(helper, body, () -> {
             assertEnded(helper, action, BodyAction.Outcome.DONE);
             helper.assertTrue(at(helper, body).equals(DOOR.east()), "ended at " + at(helper, body) + ", not just past the door; " + action.result());
-            helper.assertTrue(action.result().startsWith("went through ") && action.result().contains("(under open sky)"), action.result());
+            helper.assertTrue(action.result().startsWith("went through ") && action.result().contains("(under open sky)")
+                    && action.result().contains("; oak_door is closed now"), action.result());
             helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
             assertRoomIntact(helper);
         });

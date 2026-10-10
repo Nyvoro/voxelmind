@@ -124,7 +124,7 @@ public final class GoToAction extends BodyAction {
                 BlockPos goal = throughTo != null ? throughTo : ((Targets.PosTarget) target).pos();
                 BlockPos at = ctx.body().blockPosition();
                 String reached = throughTo != null && at.equals(goal)
-                        ? "went through " + target.label() + " to " + Names.pos(goal) + " (under " + Cover.over(ctx.level(), goal) + ")"
+                        ? "went through " + target.label() + " to " + Names.pos(goal) + " (under " + Cover.over(ctx.level(), goal) + ")" + passageNow()
                         : at.equals(goal) ? "arrived at " + target.label()
                         : "stopped " + String.format(java.util.Locale.ROOT, "%.1f", Math.sqrt(at.distSqr(goal))) + " blocks from " + target.label();
                 done(reached + "; standing at " + where + routeWork());
@@ -148,6 +148,13 @@ public final class GoToAction extends BodyAction {
                 : Direction.fromAxisAndDirection(axis, side > 0 ? Direction.AxisDirection.NEGATIVE : Direction.AxisDirection.POSITIVE);
         if (away.getAxis() != axis) away = facing;
         return lower.relative(away);
+    }
+
+    /** The door or gate walked through as the walk leaves it: "; oak_door is closed now". */
+    private String passageNow() {
+        BlockState state = ctx.level().getBlockState(((Targets.PosTarget) target).pos());
+        if (!state.hasProperty(BlockStateProperties.OPEN)) return "";
+        return "; " + Names.id(state.getBlock()) + " is " + (state.getValue(BlockStateProperties.OPEN) ? "open" : "closed") + " now";
     }
 
     private String routeWork() {
