@@ -26,8 +26,10 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -338,7 +340,14 @@ public final class Sensory {
         return line.append(".\n").toString();
     }
 
-    /** With the head in water: where the water above it ends, and whether air or a block comes next. */
+    /** Steps through water within which the nearest air is looked for when a block closes the water above the head. */
+    private static final int AIR_SEARCH_STEPS = 16;
+    private static final Direction[] AIR_SEARCH_ORDER = {Direction.UP, Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST, Direction.DOWN};
+
+    /**
+     * With the head in water: where the water above it ends, and whether air or a block comes next; when a block, the
+     * nearest air through the water.
+     */
     private static String waterLine(ServerLevel level, BlockPos feet) {
         BlockPos head = feet.above();
         if (!level.getFluidState(head).is(FluidTags.WATER)) return "";
@@ -348,8 +357,32 @@ public final class Sensory {
         if (level.getFluidState(cursor).is(FluidTags.WATER)) return "Head under water: the water goes on above y=" + limit + ".\n";
         BlockState next = level.getBlockState(cursor);
         int surface = cursor.getY() - 1;
-        return "Head under water: the water above you ends at y=" + surface + " (" + (surface - head.getY()) + " up); above it is "
-                + (next.isAir() ? "air" : Names.id(next.getBlock()) + placedNote(level, cursor)) + " at y=" + cursor.getY() + ".\n";
+        String line = "Head under water: " + (surface == head.getY() ? "the water ends at your head (y=" + surface + ")"
+                : "the water above you ends at y=" + surface + " (" + (surface - head.getY()) + " up)") + "; above it is ";
+        if (next.isAir()) return line + "air at y=" + cursor.getY() + ".\n";
+        return line + Names.id(next.getBlock()) + placedNote(level, cursor) + " at y=" + cursor.getY() + "; " + nearestAir(level, head) + ".\n";
+    }
+
+    /** The nearest air from {@code head} through water: "nearest air through the water: (x,y,z), 5 blocks away". */
+    private static String nearestAir(ServerLevel level, BlockPos head) {
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        Map<BlockPos, Integer> steps = new HashMap<>();
+        queue.add(head);
+        steps.put(head, 0);
+        while (!queue.isEmpty()) {
+            BlockPos at = queue.poll();
+            int n = steps.get(at);
+            if (n >= AIR_SEARCH_STEPS) continue;
+            for (Direction d : AIR_SEARCH_ORDER) {
+                BlockPos next = at.relative(d);
+                if (steps.containsKey(next) || !level.isLoaded(next)) continue;
+                steps.put(next, n + 1);
+                BlockState state = level.getBlockState(next);
+                if (state.isAir()) return "nearest air through the water: " + Names.pos(next) + ", " + (n + 1) + " blocks away";
+                if (level.getFluidState(next).is(FluidTags.WATER) && state.getCollisionShape(level, next).isEmpty()) queue.add(next);
+            }
+        }
+        return "no air within " + AIR_SEARCH_STEPS + " blocks through the water";
     }
 
     /** " (placed by NAME)" when a player placed the block at {@code pos}. */

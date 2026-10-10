@@ -362,8 +362,43 @@ public class PlacedGameTests {
             int head = body.blockPosition().getY() + 1;
             helper.assertTrue(head <= surface, "the head is still under water: head y=" + head);
             String text = Sensory.render(body, UUID.randomUUID(), "Owner", "", "");
-            helper.assertTrue(text.contains("Head under water: the water above you ends at y=" + surface + " (" + (surface - head)
-                    + " up); above it is air at y=" + (surface + 1) + ".\n"), text);
+            String where = surface == head ? "the water ends at your head (y=" + surface + ")"
+                    : "the water above you ends at y=" + surface + " (" + (surface - head) + " up)";
+            helper.assertTrue(text.contains("Head under water: " + where + "; above it is air at y=" + (surface + 1) + ".\n"), text);
+        });
+    }
+
+    @GameTest(maxTicks = 100)
+    public void sensoryNamesTheNearestAirWhenStoneClosesTheWaterAbove(GameTestHelper helper) {
+        floor(helper);
+        // A flooded tunnel two high along x under a stone ceiling; at its far end one cell of air above the water.
+        for (int x = 0; x <= 6; x++) {
+            for (int y = 1; y <= 2; y++) {
+                natural(helper, new BlockPos(x, y, 2), Blocks.STONE.defaultBlockState());
+                natural(helper, new BlockPos(x, y, 4), Blocks.STONE.defaultBlockState());
+            }
+        }
+        for (int y = 1; y <= 2; y++) {
+            natural(helper, new BlockPos(0, y, 3), Blocks.STONE.defaultBlockState());
+            natural(helper, new BlockPos(6, y, 3), Blocks.STONE.defaultBlockState());
+        }
+        for (int x = 1; x <= 5; x++) {
+            helper.setBlock(new BlockPos(x, 1, 3), Blocks.WATER);
+            helper.setBlock(new BlockPos(x, 2, 3), Blocks.WATER);
+            if (x < 5) natural(helper, new BlockPos(x, 3, 3), Blocks.STONE.defaultBlockState());
+        }
+        for (BlockPos side : new BlockPos[]{new BlockPos(6, 3, 3), new BlockPos(5, 3, 2), new BlockPos(5, 3, 4), new BlockPos(5, 4, 3)}) {
+            natural(helper, side, Blocks.STONE.defaultBlockState());
+        }
+        helper.setBlock(new BlockPos(5, 3, 3), Blocks.AIR);
+        BlockPos start = helper.absolutePos(new BlockPos(1, 1, 3));
+        BlockPos air = helper.absolutePos(new BlockPos(5, 3, 3));
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 3));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(body.blockPosition().equals(start), "the body moved to " + body.blockPosition());
+            String text = Sensory.render(body, UUID.randomUUID(), "Owner", "", "");
+            helper.assertTrue(text.contains("Head under water: the water ends at your head (y=" + (start.getY() + 1) + "); above it is stone at y="
+                    + (start.getY() + 2) + "; nearest air through the water: " + Names.pos(air) + ", 5 blocks away.\n"), text);
         });
     }
 
