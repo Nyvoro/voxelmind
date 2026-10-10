@@ -60,7 +60,8 @@ public final class FollowAction extends BodyAction {
                 return;
             }
         }
-        if (distance <= NEAR) {
+        // Close enough, unless the body stands in a doorway it opened: then it walks on past the door, where it closes.
+        if (distance <= NEAR && nav.clearOfDoors()) {
             nav.stop();
             Moves.lookAt(body, entity.getEyePosition());
             return;

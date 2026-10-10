@@ -11,9 +11,13 @@
 //
 // Log formats (both may appear in one file):
 //   old  two entries per wake: lane "speech" (say / stay_silent) and lane "action" (one body tool, applied), paired
-//        by identical woke_by and launch time (at - latency_ms), or by adjacency when latency is missing;
+//        by identical woke_by and launch time (at - latency_ms), or by adjacency when latency is missing; only the
+//        first call of a speech entry was carried out;
 //   new  one entry per wake: lane "decision" (or a hosted lane such as "builder"), tool_calls holding say and/or
-//        body tools, applied.
+//        body tools, applied. The line that went out is the logged "said" field (with "heard_by"); logs written before
+//        that field existed are read the way Mind.onDecision picks the line: the first say call, or the say argument
+//        of the first body call (a body tool's optional "say"), and nothing for a superseded, error or no-tool-call
+//        round. Extra say calls and the say arguments of skipped calls were never sent and are not judged.
 //
 // Options:
 //   --judge-model <id>   OpenRouter model id of the judge (default below)
@@ -38,7 +42,7 @@ const CHAT_WAKE = /\bchat\b|whisper/i;
 
 const SYSTEM = `You check whether one chat line of an AI companion in Minecraft agrees with what its body did.
 The companion has a player body it controls only through tool calls (go_to, follow, explore, gather, mine_block, dig, collect, craft, smelt, place_block, place_blocks, build_shelter, drop, eat, equip, attack, use_chest, sleep, survey, stop, wait, keep_current_action, or similar). Speaking changes nothing in the world.
-You get the line, the body decision taken in the same decision round, body decisions shortly before it, and the body decisions logged in the following seconds, each with what woke that round (e.g. "result of gather (done)" means a gather ended with outcome done; "chat from X" means X said something). When they were logged you also get the owner's chat, the running body action and result rows.
+You get the line (sent as a say call, or as the say argument of the body call it came with), the body decision taken in the same decision round, body decisions shortly before it, and the body decisions logged in the following seconds, each with what woke that round (e.g. "result of gather (done)" means a gather ended with outcome done; "chat from X" means X said something). When they were logged you also get the owner's chat, the running body action and result rows.
 
 Give the line exactly one label:
 - consistent: the line says something about its own body (what it does now, will do, or has done) and the decisions and results agree with it. A started action counts even if it later fails. keep_current_action or "already running" keeps the running action going.
@@ -130,15 +134,64 @@ function parseCall(raw) {
   return { name: sp < 0 ? s : s.slice(0, sp), args: parseArgs(rest), raw: rest };
 }
 
-function sayText(call) {
-  if (call.args && typeof call.args.text === 'string') return call.args.text;
-  const m = /"text"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(call.raw || '');
+/** A string argument of a logged call, also from arguments that are not valid JSON. */
+function stringArg(call, key) {
+  if (call.args && typeof call.args === 'object') return typeof call.args[key] === 'string' ? call.args[key] : '';
+  const m = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`).exec(call.raw || '');
   if (!m) return '';
   try {
     return JSON.parse(`"${m[1]}"`);
   } catch {
     return m[1];
   }
+}
+
+function sayText(call) {
+  return stringArg(call, 'text');
+}
+
+/** The say argument of a body-type call (Tools.SAY_ARGUMENT): a line spoken as the call is made. */
+function sayArgument(call) {
+  return stringArg(call, 'say').trim();
+}
+
+/**
+ * The line a one-entry-per-wake round actually sent, with where it came from: the logged "said" field, or, for logs
+ * from before it, the first line in call order as Mind.onDecision sends it.
+ */
+function sentLine(e) {
+  if (typeof e.o.said === 'string') {
+    const said = e.o.said.trim();
+    if (!said) return null;
+    const viaSay = e.calls.find((c) => c.name === 'say' && sayText(c).trim() === said);
+    const viaArg = e.calls.find((c) => !SPEECH_TOOLS.has(c.name) && sayArgument(c) === said);
+    return { text: e.o.said, via: viaSay || !viaArg ? 'say' : `say argument of ${viaArg.name}` };
+  }
+  if (/^(superseded|error|no tool call)/.test(e.applied)) return null;
+  if (/reply text/.test(e.applied) && e.content) return { text: e.content, via: 'reply text' };
+  let acted = false;
+  for (const c of e.calls) {
+    if (c.name === 'say') {
+      const t = sayText(c);
+      if (t.trim()) return { text: t, via: 'say' };
+      continue; // a say without text was not executed; a later line can still go out
+    }
+    if (SPEECH_TOOLS.has(c.name) || acted) continue; // a later body call was skipped with its say argument
+    acted = true;
+    const t = sayArgument(c);
+    // Before 0.4.2's release the argument of a call that could not be executed was held back ("say argument not sent").
+    if (t) return /say argument not sent/.test(e.applied) ? null : { text: t, via: `say argument of ${c.name}` };
+  }
+  return null;
+}
+
+/** A body call as the judge sees it: without the say argument, which is judged as the line. */
+function bodyCall(c) {
+  if (!c.args || typeof c.args !== 'object' || !('say' in c.args || 'say_to' in c.args)) return c;
+  const args = { ...c.args };
+  delete args.say;
+  delete args.say_to;
+  return { name: c.name, args, raw: JSON.stringify(args) };
 }
 
 function loadEntries(fileName) {
@@ -197,7 +250,7 @@ function buildRounds(entries) {
       partner.set(s.idx, best.a);
     }
   }
-  const body = (e) => e.calls.filter((c) => !SPEECH_TOOLS.has(c.name));
+  const body = (e) => e.calls.filter((c) => !SPEECH_TOOLS.has(c.name)).map(bodyCall);
   for (const e of entries) {
     if (e.lane === 'memory' || !e.lane) continue;
     if (e.lane === 'action') {
@@ -208,17 +261,19 @@ function buildRounds(entries) {
     }
     if (e.lane === 'speech') {
       const a = partner.get(e.idx);
-      const says = e.calls.filter((c) => c.name === 'say').map(sayText).filter((t) => t.trim());
+      // 0.4.1 carried out the first call of a speech entry only: stay_silent first means nothing was said.
+      const first = e.calls[0];
+      const says = first && first.name === 'say' && sayText(first).trim() ? [sayText(first)] : [];
       rounds.push({ format: 'old', idx: a ? Math.min(a.idx, e.idx) : e.idx, line: e.line, at: e.at, launch: e.launch, wokeBy: e.wokeBy,
         says: /^(invalid|error|no tool call)/.test(e.applied) ? [] : says, sayApplied: e.applied,
         body: a ? body(a) : [], bodyApplied: a ? a.applied : '', bodyAt: a ? a.at : null, bodyLine: a ? a.line : null, paired: !!a,
         prompts: [e.prompt, a && a.prompt].filter(Boolean), entries: a ? [e, a] : [e], expect: e.o._expect || (a && a.o._expect) });
       continue;
     }
-    // One entry per wake: the new companion format, or a hosted Builder/God turn.
-    const says = e.calls.filter((c) => c.name === 'say').map(sayText).filter((t) => t.trim());
-    if (/reply text/.test(e.applied) && e.content) says.unshift(e.content);
-    rounds.push({ format: 'new', idx: e.idx, line: e.line, at: e.at, launch: e.launch, wokeBy: e.wokeBy, says, sayApplied: e.applied,
+    // One entry per wake: the new companion format, or a hosted Builder/God turn. One line at most went out.
+    const sent = sentLine(e);
+    const says = sent ? [sent.text] : [];
+    rounds.push({ format: 'new', idx: e.idx, line: e.line, at: e.at, launch: e.launch, wokeBy: e.wokeBy, says, via: sent ? sent.via : null, sayApplied: e.applied,
       body: body(e), bodyApplied: e.applied, bodyAt: e.at, bodyLine: e.line, paired: true, prompts: [e.prompt].filter(Boolean), entries: [e], expect: e.o._expect });
   }
   rounds.sort((x, y) => x.idx - y.idx);
@@ -320,7 +375,7 @@ function collectItems(rounds, ownerSays) {
     }
     resultsAfter.sort((a, b) => a.rel - b.rel);
     items.push({
-      line: r.line, at: r.at, wokeBy: r.wokeBy, format: r.format, say: r.says.join(' / '), expect: r.expect || null,
+      line: r.line, at: r.at, wokeBy: r.wokeBy, format: r.format, say: r.says.join(' / '), via: r.via || 'say', expect: r.expect || null,
       same: { calls: r.body, applied: r.bodyApplied, rel: r.bodyAt != null ? r.bodyAt - r.at : null, superseded: superseded(r), present: r.paired !== false },
       before: before.map((o) => ({ rel: roundTime(o) - r.at, wokeBy: o.wokeBy, calls: o.body, applied: o.bodyApplied, superseded: superseded(o) })),
       after: after.map((o) => ({ rel: roundTime(o) - r.at, wokeBy: o.wokeBy, calls: o.body, applied: o.bodyApplied, superseded: superseded(o) })),
@@ -339,7 +394,7 @@ function decisionLine(d) {
 
 function judgeInput(it) {
   const L = [];
-  L.push(`Line said by the companion (log line ${it.line}, round woken by: ${it.wokeBy}):`);
+  L.push(`Line said by the companion (log line ${it.line}, round woken by: ${it.wokeBy}; sent as ${it.via === 'say' ? 'a say call' : `the ${it.via}`}):`);
   L.push(JSON.stringify(it.say));
   if (it.owner.length) {
     L.push('', `Owner chat before this round (${it.owner[0].source}):`);
@@ -554,7 +609,7 @@ function pct(x) {
     judge_model: opt.judge ? opt.judgeModel : null, window_s: opt.window, before_s: opt.before, since: opt.since, until: opt.until,
     entries: entries.length, rounds: rounds.length, ...summary,
     items: items.map((it) => ({
-      line: it.line, at: new Date(it.at).toISOString(), woke_by: it.wokeBy, format: it.format, say: it.say,
+      line: it.line, at: new Date(it.at).toISOString(), woke_by: it.wokeBy, format: it.format, say: it.say, said_via: it.via,
       same_round: { present: it.same.present, calls: it.same.calls.map((c) => ({ name: c.name, args: c.args })), applied: it.same.applied, superseded: it.same.superseded },
       before: it.before.map((d) => ({ rel_s: Math.round(d.rel / 1000), woke_by: d.wokeBy, calls: d.calls.map((c) => ({ name: c.name, args: c.args })), applied: d.applied, superseded: d.superseded })),
       window: it.after.map((d) => ({ rel_s: Math.round(d.rel / 1000), woke_by: d.wokeBy, calls: d.calls.map((c) => ({ name: c.name, args: c.args })), applied: d.applied, superseded: d.superseded })),

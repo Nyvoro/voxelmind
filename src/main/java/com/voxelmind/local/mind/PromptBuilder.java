@@ -21,10 +21,13 @@ public final class PromptBuilder {
 
     public record Prompt(String system, String user) {}
 
-    /** {@code context} is {@link #context(Companion, String, String)} of this wake. */
-    public static Prompt decision(Companion c, String context) {
+    /**
+     * {@code context} is {@link #context(Companion, String, String)} of this wake; {@code keepable}: a body action or a wait
+     * runs, so keep_current_action is offered.
+     */
+    public static Prompt decision(Companion c, String context, boolean keepable) {
         String system = PromptTexts.SURVIVAL_FRAME + "\n\n" + PromptTexts.CONVERSATION_FRAME + "\n\n" + PromptTexts.language(language(c));
-        return new Prompt(system, context + "\n" + PromptTexts.decision(c.actionRunning()));
+        return new Prompt(system, context + "\n" + PromptTexts.decision(keepable));
     }
 
     /** The configured fallback language, or the language the owner's game is set to. */

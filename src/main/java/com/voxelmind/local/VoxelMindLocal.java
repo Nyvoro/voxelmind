@@ -7,11 +7,13 @@ import com.voxelmind.local.world.Placed;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.world.entity.item.FallingBlockEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +36,17 @@ public final class VoxelMindLocal implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(CompanionManager::start);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> CompanionManager.stop());
         ServerLifecycleEvents.SERVER_STOPPED.register(Placed::stop);
+        // The placed-blocks index is saved with the world (autosave, /save-all, the pause save, backups), not only with
+        // the companions, so a hard stop keeps it as current as the world's own files.
+        ServerLifecycleEvents.AFTER_SAVE.register((server, flush, force) -> Placed.save(server));
         PlayerBlockBreakEvents.AFTER.register((level, player, pos, state, blockEntity) -> Placed.onBreak(level, pos, state));
+        // A placed block that falls (sand, gravel, concrete powder) is still placed where it lands.
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (entity instanceof FallingBlockEntity falling) Placed.onFallStart(level, falling);
+        });
+        ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> {
+            if (entity instanceof FallingBlockEntity falling) Placed.onFallEnd(level, falling);
+        });
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             CompanionManager m = CompanionManager.get();
             if (m != null) m.tick();

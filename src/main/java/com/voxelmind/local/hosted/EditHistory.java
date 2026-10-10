@@ -1,9 +1,12 @@
 package com.voxelmind.local.hosted;
 
+import com.voxelmind.local.world.Placed;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
@@ -12,10 +15,12 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
- * Snapshots of the regions the Builder edits, so "undo" can put every block and block entity back.
- * Bounded like the hosted mod: 10 entries, one million cells in total, 300 000 cells per edit.
+ * Snapshots of the regions the Builder edits, so "undo" can put every block and block entity back, and the
+ * placed-blocks index with them. Bounded like the hosted mod: 10 entries, one million cells in total, 300 000 cells
+ * per edit.
  */
 public final class EditHistory {
     public static final int MAX_EDIT_CELLS = 300_000;
@@ -31,6 +36,8 @@ public final class EditHistory {
         public final long at = System.currentTimeMillis();
         final BlockState[] states;
         final @Nullable CompoundTag[] entities;
+        /** The placed-blocks index entries of the region before the edit, by cell index; cells without one are absent. */
+        final Int2ObjectOpenHashMap<Placed.Entry> placed = new Int2ObjectOpenHashMap<>();
         public int changed = -1;
         public boolean errors;
 
@@ -82,11 +89,14 @@ public final class EditHistory {
         BlockState[] states = new BlockState[(int) cells];
         CompoundTag[] entities = new CompoundTag[(int) cells];
         Entry probe = new Entry("e" + (++counter), label, level, min, max, states, entities);
+        Placed index = Placed.of(level);
         for (int i = 0; i < cells; i++) {
             BlockPos pos = probe.pos(i);
             states[i] = level.getBlockState(pos);
             BlockEntity be = level.getBlockEntity(pos);
             if (be != null) entities[i] = be.saveWithFullMetadata(level.registryAccess());
+            Placed.Entry placed = index == null ? null : index.entry(level.dimension(), pos);
+            if (placed != null) probe.placed.put(i, placed);
         }
         entries.addLast(probe);
         long total = 0;
@@ -95,6 +105,25 @@ public final class EditHistory {
             total -= entries.removeFirst().cells();
         }
         return probe;
+    }
+
+    /**
+     * Records what the edit changed in the placed-blocks index under the editor's name: every cell it set to another
+     * non-air block (no flowing liquid) as placed by the editor, every cell it cleared as no longer placed.
+     */
+    public static void recordPlaced(Entry e, UUID editor, String name) {
+        Placed index = Placed.of(e.level);
+        if (index == null) return;
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < e.states.length; i++) {
+            BlockPos pos = e.pos(i);
+            BlockState state = e.level.getBlockState(pos);
+            if (state.equals(e.states[i])) continue;
+            if (state.isAir()) index.remove(e.level.dimension(), pos);
+            else if (!(state.getBlock() instanceof LiquidBlock) || state.getFluidState().isSource()) {
+                index.put(e.level.dimension(), pos, state.getBlock(), editor, name, now);
+            }
+        }
     }
 
     /** Cells whose block or block entity differs from the snapshot now. */
@@ -122,6 +151,7 @@ public final class EditHistory {
     /** Puts the snapshot back and drops the entry; returns how many cells were restored. */
     public int undo(Entry e) {
         int restored = 0;
+        Placed index = Placed.of(e.level);
         for (int i = 0; i < e.states.length; i++) {
             BlockPos pos = e.pos(i);
             BlockState was = e.states[i];
@@ -130,6 +160,8 @@ public final class EditHistory {
                 e.level.removeBlockEntity(pos);
                 e.level.setBlock(pos, was, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
                 restored++;
+                // The index of a restored cell is what it was before the edit, like the block.
+                if (index != null) index.restore(e.level.dimension(), pos, e.placed.get(i));
             }
             CompoundTag tag = e.entities[i];
             if (tag != null) {

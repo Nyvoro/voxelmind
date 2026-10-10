@@ -9,6 +9,7 @@ import com.voxelmind.local.config.LocalConfig;
 import com.voxelmind.local.tool.Tools;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -20,13 +21,14 @@ import java.util.concurrent.ThreadLocalRandom;
  * Decides when the companion's model is asked and carries out what it chooses.
  * Events wake it; each wake leads to one decision call whose tools can speak (say)
  * and choose one body tool. Code executes the choice and records the observed result.
+ * One decision is in flight at a time: wakes that come meanwhile wait for it and lead
+ * to the next decision right after it was carried out.
  */
 public final class Mind {
     private final Companion c;
     private final Set<String> reasons = new LinkedHashSet<>();
     private boolean wanted;
     private long dueAt;
-    private int request;
     private boolean inFlight;
     private long nextIdleAt;
     private long waitUntil;
@@ -37,6 +39,9 @@ public final class Mind {
     private final MemoryWriter memory = new MemoryWriter();
     private int invalidStreak;
     private DecisionLog log;
+    /** The line the decision being carried out sent, with who heard it; for the passive decision log. */
+    private @Nullable String said;
+    private @Nullable String heardBy;
 
     public Mind(Companion c) {
         this.c = c;
@@ -47,18 +52,22 @@ public final class Mind {
         this.log = log;
     }
 
-    /** Something happened that may deserve a decision. */
+    /** Something happened in the world that may deserve a decision; it ends a running wait. */
     public void wake(String reason, long debounceMs) {
         long now = System.currentTimeMillis();
         if (waitUntil > 0 && !reason.startsWith("waited")) endWait("wait interrupted after " + ((now - waitStarted) / 1000) + "s by " + reason, "done");
+        request(reason, debounceMs);
+    }
+
+    /**
+     * Asks for one more decision for {@code reason}. A decision already in flight is carried out first; this one follows
+     * right after. Unlike {@link #wake} it leaves a running wait running: the timer and the technical retries are no
+     * event in the world.
+     */
+    private void request(String reason, long debounceMs) {
         reasons.add(reason);
         wanted = true;
-        if (reason.startsWith("chat") && inFlight) {
-            // The running decision did not hear this chat: its late response is logged and not executed.
-            request++;
-            inFlight = false;
-        }
-        long due = now + debounceMs;
+        long due = System.currentTimeMillis() + debounceMs;
         dueAt = dueAt == 0 ? due : Math.min(dueAt, due);
         scheduleIdle();
     }
@@ -80,12 +89,7 @@ public final class Mind {
         }
         if (config.idleWakeMaxSeconds > 0 && now >= nextIdleAt) {
             scheduleIdle();
-            if (ownerNear() && ownerActive(c.owner()) && !inFlight && reasons.isEmpty()) {
-                // Not through wake(): a timer leaves a running wait running.
-                reasons.add("a quiet moment (timer)");
-                wanted = true;
-                dueAt = now;
-            }
+            if (ownerNear() && ownerActive(c.owner()) && !inFlight && reasons.isEmpty()) request("a quiet moment (timer)", 0);
         }
         if (wanted && !inFlight && dueAt > 0 && now >= dueAt) launch(server, now);
         memory.tick(c, server, log);
@@ -129,13 +133,14 @@ public final class Mind {
         }
         String wokeBy = String.join("; ", reasons);
         clearWants();
-        PromptBuilder.Prompt prompt = PromptBuilder.decision(c, PromptBuilder.context(c, wokeBy, waitLine(now)));
-        JsonArray tools = Tools.decisionTools(c.actionRunning());
-        int id = ++request;
+        // keep_current_action is offered whenever there is something to keep: a running body action or a running wait.
+        boolean keepable = c.actionRunning() || waitUntil > 0;
+        PromptBuilder.Prompt prompt = PromptBuilder.decision(c, PromptBuilder.context(c, wokeBy, waitLine(now)), keepable);
+        JsonArray tools = Tools.decisionTools(keepable);
         inFlight = true;
         LocalConfig config = LocalConfig.get();
         LlmClient.chat(config.model, messages(prompt), tools, true, config.temperature, config.maxTokens, null)
-                .whenComplete((response, error) -> server.execute(() -> onDecision(id, wokeBy, prompt, response, error)));
+                .whenComplete((response, error) -> server.execute(() -> onDecision(wokeBy, prompt, response, error)));
     }
 
     private void clearWants() {
@@ -157,60 +162,70 @@ public final class Mind {
         return messages;
     }
 
-    private void onDecision(int id, String wokeBy, PromptBuilder.Prompt prompt, LlmClient.Response response, Throwable error) {
-        if (id != request) {
-            logCall(wokeBy, prompt, response, error, "superseded by a newer wake");
-            return;
-        }
+    private void onDecision(String wokeBy, PromptBuilder.Prompt prompt, LlmClient.Response response, Throwable error) {
         inFlight = false;
+        said = null;
+        heardBy = null;
         if (error != null) {
             onError(error);
             logCall(wokeBy, prompt, null, error, "error");
             return;
         }
+        // Text written next to the tool calls reaches no one; that it stayed unheard is a fact for the next decision.
+        String text = response.content() == null ? "" : response.content().trim();
+        if (!text.isEmpty()) {
+            c.event("note", "your plain text was not heard; only say and say arguments reach players: \""
+                    + (text.length() > 200 ? text.substring(0, 200) + "…" : text) + "\"", false, null);
+        }
         List<LlmClient.ToolCall> calls = response.toolCalls();
         if (calls.isEmpty()) {
             // The endpoint ignored tool_choice=required. Nothing is executed or said; one technical retry follows.
             c.event("note", "your last decision contained no tool call, so nothing was executed or said", false, null);
-            if (++invalidStreak <= 1) wake("your last decision contained no tool call", 2000);
+            if (++invalidStreak <= 1) request("your last decision contained no tool call", 2000);
             logCall(wokeBy, prompt, response, null, "no tool call");
             return;
         }
         // In the order the calls came: the first line (a say call or a body call's say argument) is sent, the first other
-        // call is the body choice of this decision.
+        // call is the body choice of this decision. A line counts as sent only once it went out.
         List<String> applied = new ArrayList<>();
-        boolean said = false;
         boolean acted = false;
         boolean spoke = false;
         for (LlmClient.ToolCall call : calls) {
             boolean say = call.name().equals("say");
-            if (say ? said : acted) {
+            if (say ? said != null : acted) {
                 c.event("note", "your extra tool call " + Tools.callText(call.name(), call.arguments())
                         + (say ? " was not sent: one say per decision" : " was not executed: one action per decision"), false, null);
                 applied.add("extra " + call.name() + " skipped");
                 continue;
             }
-            if (say) said = true;
-            else acted = true;
+            if (!say) acted = true;
             Tools.Choice choice = Tools.parse(call.name(), call.arguments());
             spoke |= choice instanceof Tools.Say;
             applied.add(apply(choice, say));
-            String line = say ? "" : Tools.sayArgument(call.name(), call.arguments());
-            if (line.isEmpty()) continue;
-            if (choice instanceof Tools.Invalid) {
-                c.event("note", "the say argument of " + call.name() + " was not sent: that call could not be executed", false, null);
-                applied.add("say argument not sent");
-            } else if (said) {
-                c.event("note", "the say argument \"" + line + "\" of " + call.name() + " was not sent: one say per decision", false, null);
+            // A body call's line is spoken as the call is made, whatever became of the call itself.
+            Tools.Line line = say ? null : Tools.sayArgument(call.name(), call.arguments());
+            if (line == null) continue;
+            if (said != null) {
+                c.event("note", "the say argument \"" + line.text() + "\" of " + call.name() + " was not sent: one say per decision", false, null);
                 applied.add("say argument not sent");
             } else {
-                said = true;
-                applied.add("say (" + c.say(line, "say", "") + ")");
+                applied.add("say (" + speak(line.text(), line.mode(), line.target()) + ")");
             }
         }
+        // An action that ended as it started is recorded after the decision's line, which was spoken as the call was made.
+        c.recordIfFinished();
         // A decision that only speaks is complete too, so a later technical failure gets its one retry again.
         if (spoke && !acted) invalidStreak = 0;
         logCall(wokeBy, prompt, response, null, String.join(" + ", applied));
+    }
+
+    /** Sends one line; "owner" names the owner for a whisper. Returns who heard it. */
+    private String speak(String text, String mode, String target) {
+        String to = mode.equals("whisper") && target.equalsIgnoreCase("owner") ? c.ownerName() : target;
+        String audience = c.say(text, mode, to);
+        said = text;
+        heardBy = audience;
+        return audience;
     }
 
     /** Carries out a parsed choice; returns a short description for the passive log. */
@@ -248,12 +263,11 @@ public final class Mind {
                 return "keep_current_action";
             }
             case Tools.Say line -> {
-                String audience = c.say(line.text(), line.mode(), line.target());
-                return "say (" + audience + ")";
+                return "say (" + speak(line.text(), line.mode(), line.target()) + ")";
             }
             case Tools.Invalid invalid -> {
                 c.event("result", invalid.call() + ": cannot execute: " + invalid.reason(), false, "failed");
-                if (!say && ++invalidStreak <= 1) wake("your previous tool call could not be executed", 200);
+                if (!say && ++invalidStreak <= 1) request("your previous tool call could not be executed", 200);
                 return "invalid: " + invalid.reason();
             }
         }
@@ -271,7 +285,7 @@ public final class Mind {
     private String waitLine(long now) {
         if (waitUntil == 0) return "";
         return waitCall + " running for " + ((now - waitStarted) / 1000) + "s of " + ((waitUntil - waitStarted) / 1000)
-                + "s; any new event, stop, wait or another body action ends it";
+                + "s; keep_current_action and say leave it running; any new event, stop, wait or another body action ends it";
     }
 
     private void onError(Throwable error) {
@@ -299,6 +313,11 @@ public final class Mind {
         entry.addProperty("companion", c.name());
         entry.addProperty("woke_by", wokeBy);
         entry.addProperty("applied", applied);
+        // The line that actually went out in this decision, for measurement (tools/e2e/say-do.cjs); absent when none did.
+        if (said != null) {
+            entry.addProperty("said", said);
+            entry.addProperty("heard_by", heardBy);
+        }
         entry.addProperty("prompt_chars", prompt.system().length() + prompt.user().length());
         if (LocalConfig.get().logPrompts) entry.addProperty("prompt", prompt.user());
         if (response != null) {

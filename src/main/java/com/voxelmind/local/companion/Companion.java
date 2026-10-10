@@ -4,6 +4,7 @@ import com.voxelmind.local.VoxelMindLocal;
 import com.voxelmind.local.action.ActionContext;
 import com.voxelmind.local.action.BodyAction;
 import com.voxelmind.local.body.CompanionPlayer;
+import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.compat.Compat;
 import com.voxelmind.local.config.LocalConfig;
 import com.voxelmind.local.hosted.BuilderMind;
@@ -83,11 +84,15 @@ public final class Companion implements CompanionPlayer.BodyListener {
     }
 
     void detach() {
-        if (current != null && !current.finished()) {
-            current.preempt("interrupted: you left the world");
+        if (current != null) {
+            if (!current.finished()) current.preempt("interrupted: you left the world");
             record(false);
         }
-        if (body != null) body.setListener(null);
+        if (body != null) {
+            // Leaving is the end of the last walk: the doors it opened and can still reach are closed on the way out.
+            Navigator.leave(body);
+            body.setListener(null);
+        }
         body = null;
     }
 
@@ -106,10 +111,13 @@ public final class Companion implements CompanionPlayer.BodyListener {
             }
             return;
         }
-        if (current != null) {
-            current.tick();
-            if (current.finished()) record(true);
+        BodyAction action = current;
+        if (action != null) {
+            action.tick();
+            // The tick can end in the body's death (a bed exploding at use_block), which already recorded the action.
+            if (action == current && action.finished()) record(true);
         }
+        if (body == null || body.isDeadOrDying()) return;
         mind.tick(server);
     }
 
@@ -133,19 +141,31 @@ public final class Companion implements CompanionPlayer.BodyListener {
 
     // ---- body actions ----
 
+    /**
+     * Starts a body action, replacing the running one. One that ends as it starts is recorded by {@link #recordIfFinished}
+     * once the decision that chose it said its line, or on the next tick.
+     */
     public void startAction(BodyAction action) {
         if (body == null) return;
-        if (current != null && !current.finished()) {
-            current.preempt("replaced by your newer choice " + action.call());
-            record(false);
+        if (current != null) {
+            if (current.finished()) record(true);
+            else {
+                current.preempt("replaced by your newer choice " + action.call());
+                record(false);
+            }
         }
         current = action;
         currentStartedAt = System.currentTimeMillis();
         action.start(ctx);
-        if (action.finished()) record(true);
+    }
+
+    /** Records the body action now when it has already ended, e.g. one that ended as it started. */
+    public void recordIfFinished() {
+        if (current != null && current.finished()) record(true);
     }
 
     public void stopAction(String call) {
+        recordIfFinished();
         if (current != null && !current.finished()) {
             current.preempt("stopped by " + call);
             record(false);
@@ -277,8 +297,8 @@ public final class Companion implements CompanionPlayer.BodyListener {
 
     @Override
     public void onDeath(DamageSource source, Component deathMessage) {
-        if (current != null && !current.finished()) {
-            current.preempt("interrupted: you died");
+        if (current != null) {
+            if (!current.finished()) current.preempt("interrupted: you died");
             record(false);
         }
         event("death", "you died: " + deathMessage.getString() + "; your items dropped where you died unless the world keeps inventory"

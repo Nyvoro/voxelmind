@@ -8,6 +8,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
 
@@ -72,8 +73,10 @@ public final class Resources {
         Block block = Names.block(s);
         if (block != null) {
             Item asItem = block.asItem();
-            return new Resource(Names.id(block), st -> st.is(block), null,
-                    item -> item == asItem || Block.byItem(item) == block, block.defaultBlockState().requiresCorrectToolForDrops());
+            // A crop counts its produce (wheat, beetroot, carrot), not the seeds its block stands for as an item.
+            Item produce = block instanceof CropBlock ? Names.item(Names.id(block)) : null;
+            Predicate<Item> counts = produce != null ? item -> item == produce : item -> item == asItem || Block.byItem(item) == block;
+            return new Resource(Names.id(block), st -> st.is(block), null, counts, block.defaultBlockState().requiresCorrectToolForDrops());
         }
         return null;
     }

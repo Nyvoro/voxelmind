@@ -73,6 +73,8 @@ public class MindGameTests {
     private static final Map<String, AtomicInteger> REQUESTS = new ConcurrentHashMap<>();
     /** The user message of each request by companion name, in order. */
     private static final Map<String, List<String>> PROMPTS = new ConcurrentHashMap<>();
+    /** The names of the tools offered with each request by companion name, in order. */
+    private static final Map<String, List<List<String>>> TOOLS = new ConcurrentHashMap<>();
     /** Answers the stub holds back until the test releases them, by "name#request number". */
     private static final Map<String, CountDownLatch> HELD = new ConcurrentHashMap<>();
     private static HttpServer stub;
@@ -118,15 +120,21 @@ public class MindGameTests {
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         String reply = EMPTY;
         String user = "";
+        List<String> offered = new java.util.ArrayList<>();
         try {
-            JsonArray messages = JsonParser.parseString(body).getAsJsonObject().getAsJsonArray("messages");
+            JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+            JsonArray messages = root.getAsJsonArray("messages");
             user = messages.get(messages.size() - 1).getAsJsonObject().get("content").getAsString();
+            if (root.has("tools")) {
+                for (var tool : root.getAsJsonArray("tools")) offered.add(tool.getAsJsonObject().getAsJsonObject("function").get("name").getAsString());
+            }
         } catch (RuntimeException ignored) {
         }
         for (Map.Entry<String, List<String>> e : ANSWERS.entrySet()) {
             if (!user.contains("You are " + e.getKey() + ".")) continue;
             int n = REQUESTS.computeIfAbsent(e.getKey(), k -> new AtomicInteger()).incrementAndGet();
             PROMPTS.computeIfAbsent(e.getKey(), k -> new CopyOnWriteArrayList<>()).add(user);
+            TOOLS.computeIfAbsent(e.getKey(), k -> new CopyOnWriteArrayList<>()).add(offered);
             reply = e.getValue().get(Math.min(n, e.getValue().size()) - 1);
             CountDownLatch held = HELD.get(e.getKey() + "#" + n);
             if (held != null) {
@@ -158,6 +166,12 @@ public class MindGameTests {
         return prompts.size() >= n ? prompts.get(n - 1) : "";
     }
 
+    /** The tool names offered with the companion's n-th request. */
+    private static List<String> tools(Companion c, int n) {
+        List<List<String>> tools = TOOLS.getOrDefault(c.name(), List.of());
+        return tools.size() >= n ? tools.get(n - 1) : List.of();
+    }
+
     private static JsonObject call(String name, String... pairs) {
         JsonObject args = new JsonObject();
         for (int i = 0; i < pairs.length; i += 2) args.addProperty(pairs[i], pairs[i + 1]);
@@ -177,11 +191,17 @@ public class MindGameTests {
 
     /** A chat completion whose message holds exactly these tool calls, in this order. */
     private static String completion(JsonObject... calls) {
+        return completion(null, calls);
+    }
+
+    /** A chat completion with this plain text next to these tool calls. */
+    private static String completion(String content, JsonObject... calls) {
         JsonArray toolCalls = new JsonArray();
         for (JsonObject call : calls) toolCalls.add(call);
         JsonObject message = new JsonObject();
         message.addProperty("role", "assistant");
-        message.add("content", JsonNull.INSTANCE);
+        if (content == null) message.add("content", JsonNull.INSTANCE);
+        else message.addProperty("content", content);
         message.add("tool_calls", toolCalls);
         JsonObject choice = new JsonObject();
         choice.addProperty("index", 0);
@@ -385,38 +405,49 @@ public class MindGameTests {
     }
 
     @GameTest(maxTicks = MAX_TICKS)
-    public void aNewerChatSupersedesTheDecisionInFlight(GameTestHelper helper) throws IOException {
+    public void aChatDuringADecisionQueuesBehindIt(GameTestHelper helper) throws IOException {
         floor(helper);
         useStub();
         ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
         String name = owner.getGameProfile().name();
-        Companion c = summon(helper, owner, completion(call("say", "text", "A stale line."), call("dig", "direction", "down")),
-                completion(call("say", "text", "A fresh line."), call("follow", "target", "owner")));
-        CountDownLatch late = hold(c, 1);
-        c.hear(name, true, "Dig down right here.", "public");
-        boolean[] step = {false, false};
+        String goal = abs(helper, 6, 1, 6);
+        Companion c = summon(helper, owner, completion(call("say", "text", "First answer."), call("go_to", "target", goal)),
+                completion(call("say", "text", "Second answer."), call("follow", "target", "owner")));
+        CountDownLatch first = hold(c, 1);
+        c.hear(name, true, "Go to the corner, please.", "public");
+        boolean[] spoke = {false};
         helper.onEachTick(() -> {
-            if (!step[0] && requests(c) == 1) {
-                // The owner speaks again while the first decision still waits for its answer.
-                step[0] = true;
-                c.hear(name, true, "No, follow me instead.", "public");
-            }
-            if (step[0] && !step[1] && sent(c, "A fresh line.") != null) {
-                // The first decision's answer arrives after the newer decision was carried out.
-                step[1] = true;
-                late.countDown();
+            if (!spoke[0] && requests(c) == 1) {
+                // The owner speaks again while the first decision still waits for its answer; then the answer arrives.
+                spoke[0] = true;
+                c.hear(name, true, "And then follow me.", "public");
+                first.countDown();
             }
         });
         expect(helper, owner, c, () -> {
-            List<String> log = decisionLog(c);
-            helper.assertTrue(log.stream().anyMatch(l -> l.contains("\"applied\":\"superseded by a newer wake\"") && l.contains("A stale line.")),
-                    "the late answer is logged as superseded: " + log);
-            helper.assertTrue(sent(c, "A fresh line.") != null && started(c, "follow"), "the newer decision was carried out");
-            helper.assertTrue(sent(c, "A stale line.") == null, "the late answer's line was never sent");
-            boolean dug = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("result") && e.text.startsWith("dig("));
-            helper.assertFalse(dug || started(c, "dig"), "the late answer's dig never ran");
+            helper.assertTrue(sent(c, "First answer.") != null, "the first decision's line was sent");
+            boolean walked = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("result") && e.text.startsWith("go_to("));
+            helper.assertTrue(walked, "the first decision's go_to was carried out");
+            helper.assertTrue(sent(c, "Second answer.") != null && started(c, "follow"), "the queued chat led to the next decision, carried out too");
             helper.assertTrue(requests(c) == 2, "two requests, got " + requests(c));
-            helper.assertTrue(prompt(c, 2).contains("No, follow me instead."), "the newer decision heard the newer chat");
+            String second = prompt(c, 2);
+            helper.assertTrue(second.contains("And then follow me.") && second.contains("me: \"First answer.\""),
+                    "the next decision heard the chat and saw the first line:\n" + second);
+            helper.assertFalse(decisionLog(c).stream().anyMatch(l -> l.contains("superseded")), "no decision was dropped: " + decisionLog(c));
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void plainTextNextToToolCallsIsNotedAsUnheard(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion("Let me think about where the corner is.", call("say", "text", "On my way.")));
+        c.hear(owner.getGameProfile().name(), true, "Come to the corner.", "public");
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(sent(c, "On my way.") != null, "the say call was sent");
+            helper.assertTrue(noted(c, "your plain text was not heard", "\"Let me think about where the corner is.\""), "the plain text is a note");
+            helper.assertTrue(sent(c, "Let me think") == null, "the plain text was not said");
         });
     }
 
@@ -474,6 +505,106 @@ public class MindGameTests {
     }
 
     @GameTest(maxTicks = MAX_TICKS)
+    public void aDecisionDuringAWaitCanKeepIt(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        JsonObject wait = new JsonObject();
+        wait.addProperty("seconds", 60);
+        Companion c = summon(helper, owner, completion(call("wait", wait)), completion(call("keep_current_action")));
+        CountDownLatch first = hold(c, 1);
+        c.hear(owner.getGameProfile().name(), true, "Wait here for me.", "public");
+        boolean[] woke = {false};
+        helper.onEachTick(() -> {
+            if (!woke[0] && requests(c) == 1) {
+                woke[0] = true;
+                c.mind.wake("a test event", 0);
+                first.countDown();
+            }
+        });
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(requests(c) == 2, "two requests, got " + requests(c));
+            helper.assertFalse(tools(c, 1).contains("keep_current_action"), "nothing ran at the first decision: " + tools(c, 1));
+            helper.assertTrue(tools(c, 2).contains("keep_current_action"), "a running wait can be kept: " + tools(c, 2));
+            helper.assertTrue(prompt(c, 2).contains("keep_current_action changes nothing"), "the decision text says what keeping does");
+            List<String> log = decisionLog(c);
+            helper.assertTrue(log.size() == 2 && log.get(1).contains("\"applied\":\"keep_current_action\""), "kept: " + log);
+            boolean ended = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("result") && e.text.startsWith("wait("));
+            helper.assertFalse(ended, "keep_current_action left the wait running");
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aTechnicalRetryLeavesAWaitRunning(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        JsonObject wait = new JsonObject();
+        wait.addProperty("seconds", 60);
+        // During the wait: a call that cannot be executed (dig without direction), then its one retry, which speaks.
+        Companion c = summon(helper, owner, completion(call("wait", wait)), completion(call("dig")), completion(call("say", "text", "Still here.")));
+        CountDownLatch first = hold(c, 1);
+        c.hear(owner.getGameProfile().name(), true, "Wait here for me.", "public");
+        boolean[] woke = {false};
+        helper.onEachTick(() -> {
+            if (!woke[0] && requests(c) == 1) {
+                woke[0] = true;
+                c.mind.wake("a test event", 0);
+                first.countDown();
+            }
+        });
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(sent(c, "Still here.") != null, "the retry spoke; requests: " + requests(c));
+            helper.assertTrue(requests(c) == 3, "three requests, got " + requests(c));
+            helper.assertTrue(prompt(c, 3).contains("Woke by: your previous tool call could not be executed") && prompt(c, 3).contains("WAIT: "),
+                    "the retry still sees the running wait:\n" + prompt(c, 3));
+            boolean ended = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("result") && e.text.startsWith("wait("));
+            helper.assertFalse(ended, "the technical retry ended the wait");
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aSayArgumentCanWhisperToTheOwner(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        String goal = abs(helper, 6, 1, 6);
+        Companion c = summon(helper, owner, completion(call("go_to", "target", goal, "say", "Only for you.", "say_to", "owner")));
+        c.hear(owner.getGameProfile().name(), true, "Psst, come to the corner.", "whisper");
+        expect(helper, owner, c, () -> {
+            Timeline.Event line = sent(c, "Only for you.");
+            helper.assertTrue(line != null && line.text.contains("(whisper, heard by " + owner.getGameProfile().name() + ")"),
+                    "the line was whispered to the owner: " + (line == null ? null : line.text));
+            helper.assertTrue(started(c, "go_to"), "the body action started");
+            String applied = JsonParser.parseString(decisionLog(c).getFirst()).getAsJsonObject().get("applied").getAsString();
+            helper.assertTrue(applied.startsWith("started go_to(target=\"" + goal + "\") + say ("), "say_to is no part of the call: " + applied);
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void theLineComesBeforeTheResultOfAnActionThatEndsAtOnce(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        BlockPos air = helper.absolutePos(new BlockPos(6, 3, 6));
+        JsonObject use = new JsonObject();
+        use.addProperty("x", air.getX());
+        use.addProperty("y", air.getY());
+        use.addProperty("z", air.getZ());
+        use.addProperty("say", "Let me try that.");
+        // use_block on air ends as it starts.
+        Companion c = summon(helper, owner, completion(call("use_block", use)));
+        c.hear(owner.getGameProfile().name(), true, "Use that, please.", "public");
+        expect(helper, owner, c, () -> {
+            Timeline.Event line = sent(c, "Let me try that.");
+            Timeline.Event result = c.state.timeline.last(Timeline.KEEP).stream()
+                    .filter(e -> e.kind.equals("result") && e.text.startsWith("use_block(")).findFirst().orElse(null);
+            helper.assertTrue(line != null && result != null, "line and result: " + line + ", " + result);
+            helper.assertTrue(line.seq < result.seq, "the line spoken with the call comes before its result in the timeline");
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
     public void aBodyCallSpeaksItsSayArgument(GameTestHelper helper) throws IOException {
         floor(helper);
         useStub();
@@ -509,17 +640,37 @@ public class MindGameTests {
     }
 
     @GameTest(maxTicks = MAX_TICKS)
-    public void anInvalidBodyCallKeepsItsLine(GameTestHelper helper) throws IOException {
+    public void anInvalidBodyCallStillSpeaksItsLine(GameTestHelper helper) throws IOException {
         floor(helper);
         useStub();
         ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
-        // dig without its required direction cannot be executed; its line goes with it.
-        Companion c = summon(helper, owner, completion(call("dig", "say", "Digging now!")));
+        // dig without its required direction cannot be executed; its line is spoken as the call is made all the same.
+        Companion c = summon(helper, owner, completion(call("dig", "say", "Digging now!")), completion(call("say", "text", "Which way?")));
         c.hear(owner.getGameProfile().name(), true, "Dig, please.", "public");
         expect(helper, owner, c, () -> {
-            helper.assertTrue(sent(c, "Digging now!") == null, "the line of the failed call was not sent");
-            helper.assertTrue(noted(c, "say argument of dig", "could not be executed"), "the note says why");
+            helper.assertTrue(sent(c, "Digging now!") != null, "the line of the failed call was sent");
+            boolean failed = c.state.timeline.last(Timeline.KEEP).stream()
+                    .anyMatch(e -> e.kind.equals("result") && e.text.startsWith("dig(): cannot execute: missing required argument 'direction'"));
+            helper.assertTrue(failed, "the failed call is a result row");
             helper.assertFalse(started(c, "dig"), "dig did not run");
+            helper.assertTrue(sent(c, "Which way?") != null && requests(c) == 2, "one technical retry followed; requests: " + requests(c));
+            String entry = decisionLog(c).getFirst();
+            helper.assertTrue(entry.contains("\"said\":\"Digging now!\""), "the log names the line that went out: " + entry);
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void anEmptySayDoesNotUseUpTheLine(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        String goal = abs(helper, 6, 1, 6);
+        Companion c = summon(helper, owner, completion(call("say", "text", ""), call("go_to", "target", goal, "say", "Coming!")));
+        c.hear(owner.getGameProfile().name(), true, "Come here.", "public");
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(sent(c, "Coming!") != null, "the say argument after a say without text was sent");
+            helper.assertTrue(started(c, "go_to"), "the body action started");
+            helper.assertFalse(noted(c, "one say per decision"), "nothing was held back as a second line");
         });
     }
 

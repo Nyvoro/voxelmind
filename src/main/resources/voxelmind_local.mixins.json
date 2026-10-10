@@ -5,7 +5,9 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "BlockItemMixin",
+    "PistonBaseBlockMixin",
     "PlayerListRespawnMixin",
+    "ServerPlayerGameModeMixin",
     "SleepStatusMixin"
   ],
   "injectors": {

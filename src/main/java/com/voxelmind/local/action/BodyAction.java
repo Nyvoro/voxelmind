@@ -77,7 +77,7 @@ public abstract class BodyAction {
         cleanup();
         String sofar = progress();
         outcome = Outcome.PREEMPTED;
-        result = (sofar.isEmpty() ? "" : sofar + "; ") + why;
+        result = (sofar.isEmpty() ? "" : sofar + "; ") + why + doorFacts();
     }
 
     protected final void done(String text) {
@@ -92,7 +92,12 @@ public abstract class BodyAction {
         if (finished()) return;
         cleanup();
         outcome = o;
-        result = text;
+        result = text + doorFacts();
+    }
+
+    /** The doors and gates the walks of this action opened and left open; read after cleanup ended the last walk. */
+    private String doorFacts() {
+        return nav == null ? "" : nav.doorFacts();
     }
 
     private void cleanup() {

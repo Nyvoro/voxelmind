@@ -4,11 +4,13 @@ import com.mojang.authlib.GameProfile;
 import com.voxelmind.local.action.ActionContext;
 import com.voxelmind.local.action.BodyAction;
 import com.voxelmind.local.action.DigAction;
+import com.voxelmind.local.action.GatherAction;
 import com.voxelmind.local.action.GoToAction;
 import com.voxelmind.local.action.MineBlockAction;
 import com.voxelmind.local.action.PlaceBlockAction;
 import com.voxelmind.local.body.CompanionConnection;
 import com.voxelmind.local.body.CompanionPlayer;
+import com.voxelmind.local.body.Hands;
 import com.voxelmind.local.mind.Sensory;
 import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Placed;
@@ -20,16 +22,22 @@ import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.ScaffoldingBlock;
+import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -49,10 +57,14 @@ public class PlacedGameTests {
     }
 
     private static CompanionPlayer spawn(GameTestHelper helper, BlockPos rel) {
+        return spawn(helper, rel, UUID.randomUUID());
+    }
+
+    private static CompanionPlayer spawn(GameTestHelper helper, BlockPos rel, UUID id) {
         ServerLevel level = helper.getLevel();
         MinecraftServer server = level.getServer();
         BlockPos abs = helper.absolutePos(rel);
-        GameProfile profile = new GameProfile(UUID.randomUUID(), "PlacedBody" + COUNTER.incrementAndGet());
+        GameProfile profile = new GameProfile(id, "PlacedBody" + COUNTER.incrementAndGet());
         CompanionPlayer body = new CompanionPlayer(server, level, profile);
         body.snapTo(abs.getX() + 0.5, abs.getY(), abs.getZ() + 0.5, 0f, 0f);
         server.getPlayerList().placeNewPlayer(new CompanionConnection(), body, CommonListenerCookie.createInitial(profile, false));
@@ -334,6 +346,205 @@ public class PlacedGameTests {
         });
     }
 
+    private static Placed.Entry planksOf(Placed index) {
+        return index.entry(Level.OVERWORLD, new BlockPos(10, 64, -5));
+    }
+
+    private static void remove(GameTestHelper helper, CompanionPlayer body) {
+        helper.getLevel().getServer().getPlayerList().remove(body);
+    }
+
+    @GameTest(maxTicks = 100)
+    public void aPlacedBlockInAnotherFormStaysPlaced(GameTestHelper helper) {
+        floor(helper);
+        ServerLevel level = helper.getLevel();
+        BlockPos logRel = new BlockPos(3, 1, 2);
+        BlockPos potRel = new BlockPos(3, 1, 4);
+        placedBy(helper, logRel, Blocks.CHERRY_LOG.defaultBlockState(), GASADE, "Gasade");
+        placedBy(helper, potRel, Blocks.FLOWER_POT.defaultBlockState(), GASADE, "Gasade");
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 3));
+        // A right-click turns them into other blocks where they lie: an axe strips the log, a poppy goes into the pot.
+        body.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_AXE));
+        Hands.use(body, level, Hands.aim(body, level, helper.absolutePos(logRel)));
+        body.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.POPPY));
+        Hands.use(body, level, Hands.aim(body, level, helper.absolutePos(potRel)));
+        helper.assertBlockPresent(Blocks.STRIPPED_CHERRY_LOG, logRel);
+        helper.assertBlockPresent(Blocks.POTTED_POPPY, potRel);
+        helper.assertTrue("Gasade".equals(Placed.placer(level, helper.absolutePos(logRel))), "stripped log: placer " + Placed.placer(level, helper.absolutePos(logRel)));
+        helper.assertTrue("Gasade".equals(Placed.placer(level, helper.absolutePos(potRel))), "potted poppy: placer " + Placed.placer(level, helper.absolutePos(potRel)));
+        // The world changes copper and concrete powder where they lie: weathered, waxed and hardened, still placed.
+        BlockPos copperRel = new BlockPos(5, 1, 2);
+        BlockPos copper = helper.absolutePos(copperRel);
+        placedBy(helper, copperRel, Names.block("copper_block").defaultBlockState(), GASADE, "Gasade");
+        helper.setBlock(copperRel, Names.block("exposed_copper"));
+        helper.assertTrue("Gasade".equals(Placed.placer(level, copper)), "weathered copper: placer " + Placed.placer(level, copper));
+        helper.setBlock(copperRel, Names.block("waxed_exposed_copper"));
+        helper.assertTrue("Gasade".equals(Placed.placer(level, copper)), "waxed copper: placer " + Placed.placer(level, copper));
+        BlockPos powderRel = new BlockPos(5, 1, 4);
+        BlockPos powder = helper.absolutePos(powderRel);
+        placedBy(helper, powderRel, Names.block("white_concrete_powder").defaultBlockState(), GASADE, "Gasade");
+        helper.setBlock(powderRel, Names.block("white_concrete"));
+        helper.assertTrue("Gasade".equals(Placed.placer(level, powder)), "hardened concrete: placer " + Placed.placer(level, powder));
+        // Another block in its place is not the placed block.
+        helper.setBlock(copperRel, Blocks.GLASS);
+        helper.assertTrue(Placed.placer(level, copper) == null, "glass where copper was placed counts as placed");
+        remove(helper, body);
+        helper.succeed();
+    }
+
+    @GameTest(maxTicks = 200)
+    public void aPistonCarriesAPlacedBlockAndPullsItBack(GameTestHelper helper) {
+        floor(helper);
+        ServerLevel level = helper.getLevel();
+        BlockPos fromRel = new BlockPos(3, 1, 3);
+        BlockPos toRel = new BlockPos(4, 1, 3);
+        BlockPos from = helper.absolutePos(fromRel);
+        BlockPos to = helper.absolutePos(toRel);
+        natural(helper, toRel, Blocks.AIR.defaultBlockState());
+        helper.setBlock(new BlockPos(2, 1, 3), Blocks.STICKY_PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
+        placedBy(helper, fromRel, Blocks.DIRT.defaultBlockState(), GASADE, "Gasade");
+        // Power behind the piston: it pushes the placed dirt one block east.
+        helper.setBlock(new BlockPos(1, 1, 3), Blocks.REDSTONE_BLOCK);
+        boolean[] pulled = {false};
+        helper.succeedWhen(() -> {
+            if (!pulled[0]) {
+                helper.assertBlockPresent(Blocks.DIRT, toRel);
+                helper.assertTrue("Gasade".equals(Placed.placer(level, to)), "pushed dirt: placer " + Placed.placer(level, to));
+                helper.assertTrue(index(helper).entry(level.dimension(), from) == null, "the entry stayed where the dirt was");
+                pulled[0] = true;
+                // Without power the sticky piston pulls the dirt back.
+                helper.setBlock(new BlockPos(1, 1, 3), Blocks.AIR);
+            }
+            helper.assertBlockPresent(Blocks.DIRT, fromRel);
+            helper.assertTrue("Gasade".equals(Placed.placer(level, from)), "pulled dirt: placer " + Placed.placer(level, from));
+            helper.assertTrue(index(helper).entry(level.dimension(), to) == null, "the entry stayed where the dirt was pushed to");
+        });
+    }
+
+    @GameTest(maxTicks = 100)
+    public void fallingSandIsPlacedWhereItLands(GameTestHelper helper) {
+        floor(helper);
+        ServerLevel level = helper.getLevel();
+        for (int y = 1; y <= 3; y++) natural(helper, new BlockPos(3, y, 3), Blocks.AIR.defaultBlockState());
+        BlockPos high = helper.absolutePos(new BlockPos(3, 4, 3));
+        BlockPos low = helper.absolutePos(new BlockPos(3, 1, 3));
+        placedBy(helper, new BlockPos(3, 4, 3), Blocks.SAND.defaultBlockState(), GASADE, "Gasade");
+        helper.succeedWhen(() -> {
+            helper.assertBlockPresent(Blocks.SAND, new BlockPos(3, 1, 3));
+            helper.assertTrue("Gasade".equals(Placed.placer(level, low)), "landed sand: placer " + Placed.placer(level, low));
+            helper.assertTrue(index(helper).entry(level.dimension(), high) == null, "the entry stayed where the sand was placed");
+        });
+    }
+
+    @GameTest(maxTicks = 100)
+    public void scaffoldingIsRecordedWhereItGoes(GameTestHelper helper) {
+        floor(helper);
+        ServerLevel level = helper.getLevel();
+        BlockPos baseRel = new BlockPos(3, 1, 3);
+        BlockPos base = helper.absolutePos(baseRel);
+        natural(helper, baseRel.above(), Blocks.AIR.defaultBlockState());
+        placedBy(helper, baseRel, Blocks.SCAFFOLDING.defaultBlockState().setValue(ScaffoldingBlock.DISTANCE, 0), GASADE, "Gasade");
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 3));
+        body.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.SCAFFOLDING, 4));
+        // A click on the side of a scaffold puts the new one on top of it, as a player extends a scaffolding column.
+        body.gameMode.useItemOn(body, level, body.getMainHandItem(), InteractionHand.MAIN_HAND,
+                new BlockHitResult(Vec3.atCenterOf(base).add(-0.5, 0, 0), Direction.WEST, base, false));
+        helper.assertBlockPresent(Blocks.SCAFFOLDING, baseRel.above());
+        String name = body.getGameProfile().name();
+        helper.assertTrue(name.equals(Placed.placer(level, base.above())), "new scaffold: placer " + Placed.placer(level, base.above()));
+        helper.assertTrue("Gasade".equals(Placed.placer(level, base)), "the clicked scaffold kept its placer: " + Placed.placer(level, base));
+        remove(helper, body);
+        helper.succeed();
+    }
+
+    @GameTest(maxTicks = 800)
+    public void routesDigTheirOwnPillarStepsBackDown(GameTestHelper helper) {
+        floor(helper);
+        ServerLevel level = helper.getLevel();
+        UUID id = UUID.randomUUID();
+        // A four-block dirt pillar the body's own route built, the body on top: four blocks are too far to drop.
+        for (int y = 1; y <= 4; y++) {
+            placedBy(helper, new BlockPos(3, y, 3), Blocks.DIRT.defaultBlockState(), id, "Pillar");
+            Placed.markRouteStep(level, helper.absolutePos(new BlockPos(3, y, 3)), id);
+        }
+        CompanionPlayer body = spawn(helper, new BlockPos(3, 5, 3), id);
+        body.getInventory().add(new ItemStack(Items.STONE_SHOVEL));
+        BodyAction action = run(helper, body, new GoToAction("go_to(ground)", abs(helper, 6, 1, 3)));
+        finishWhen(helper, body, () -> {
+            assertDone(helper, action);
+            helper.assertTrue(body.blockPosition().getY() == helper.absolutePos(new BlockPos(0, 1, 0)).getY(), "not back on the ground: " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void routesNeverDigBlocksPlacedOnPurpose(GameTestHelper helper) {
+        floor(helper);
+        UUID id = UUID.randomUUID();
+        // The same pillar, placed by the body on purpose (place_block): no route digs it.
+        for (int y = 1; y <= 4; y++) placedBy(helper, new BlockPos(3, y, 3), Blocks.DIRT.defaultBlockState(), id, "Pillar");
+        CompanionPlayer body = spawn(helper, new BlockPos(3, 5, 3), id);
+        body.getInventory().add(new ItemStack(Items.STONE_SHOVEL));
+        BodyAction action = run(helper, body, new GoToAction("go_to(ground)", abs(helper, 6, 1, 3)));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(action.finished() && action.outcome() == BodyAction.Outcome.FAILED, "go_to: " + action.outcome() + ": " + action.result());
+            helper.assertTrue(action.result().contains("routes never dig blocks a player placed, such as the dirt at ")
+                    && action.result().contains(" placed by Pillar"), action.result());
+            for (int y = 1; y <= 4; y++) helper.assertBlockPresent(Blocks.DIRT, new BlockPos(3, y, 3));
+        });
+    }
+
+    @GameTest(maxTicks = 300)
+    public void miningNeverBreaksAPlacedBlockInTheWay(GameTestHelper helper) {
+        floor(helper);
+        for (int y = 1; y <= 2; y++) placedBy(helper, new BlockPos(3, y, 3), Blocks.GLASS.defaultBlockState(), GASADE, "Gasade");
+        natural(helper, new BlockPos(4, 1, 3), Blocks.STONE.defaultBlockState());
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 3));
+        body.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        BodyAction action = run(helper, body, new MineBlockAction("mine_block(stone)", abs(helper, 4, 1, 3)));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(action.finished() && action.outcome() == BodyAction.Outcome.FAILED, "mine_block: " + action.outcome() + ": " + action.result());
+            helper.assertTrue(action.result().startsWith("glass at ") && action.result().contains(", placed by Gasade, is in the way to stone at "), action.result());
+            for (int y = 1; y <= 2; y++) helper.assertBlockPresent(Blocks.GLASS, new BlockPos(3, y, 3));
+            helper.assertBlockPresent(Blocks.STONE, new BlockPos(4, 1, 3));
+        });
+    }
+
+    @GameTest(maxTicks = 1200, skyAccess = true)
+    public void gatherTakesAPlantedFieldOnlyWithIncludePlaced(GameTestHelper helper) {
+        // A crop counts its produce: gathering wheat counts wheat, not the seeds the wheat block stands for as an item.
+        com.voxelmind.local.world.Resources.Resource wheat = com.voxelmind.local.world.Resources.parse("wheat");
+        helper.assertTrue(wheat != null && wheat.counts().test(Items.WHEAT) && !wheat.counts().test(Items.WHEAT_SEEDS), "gather wheat counts wheat");
+        floor(helper);
+        for (int x = 2; x <= 4; x++) {
+            helper.setBlock(new BlockPos(x, 0, 5), Blocks.FARMLAND);
+            placedBy(helper, new BlockPos(x, 1, 5), ((CropBlock) Blocks.CARROTS).getStateForAge(7), GASADE, "Gasade");
+        }
+        CompanionPlayer body = spawn(helper, new BlockPos(3, 1, 2));
+        BodyAction refused = new GatherAction("gather(carrots,2)", "carrots", 2);
+        BodyAction taken = new GatherAction("gather(carrots,2,include_placed)", "carrots", 2, true);
+        runSequence(helper, body, refused, taken);
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(refused.finished() && refused.outcome() == BodyAction.Outcome.FAILED, "gather: " + refused.outcome() + ": " + refused.result());
+            helper.assertTrue(refused.result().contains("that no player placed; 3 exposed carrots in range were placed by players (Gasade 3), "
+                    + "which include_placed true also takes"), refused.result());
+            assertDone(helper, taken);
+            helper.assertTrue(taken.result().contains(" of the broken blocks were placed (Gasade "), taken.result());
+            helper.assertTrue(body.getInventory().countItem(Items.CARROT) >= 2, "carrots gathered: " + taken.result());
+        });
+    }
+
+    @GameTest(maxTicks = 100)
+    public void sensoryCountsPlacedResourcesApart(GameTestHelper helper) {
+        floor(helper);
+        for (int y = 1; y <= 3; y++) placedBy(helper, new BlockPos(1, y, 1), Blocks.ACACIA_LOG.defaultBlockState(), GASADE, "Gasade");
+        natural(helper, new BlockPos(6, 1, 6), Blocks.ACACIA_LOG.defaultBlockState());
+        CompanionPlayer body = spawn(helper, new BlockPos(4, 1, 4));
+        finishWhen(helper, body, () -> {
+            String text = Sensory.render(body, UUID.randomUUID(), "Owner", "", "");
+            helper.assertTrue(text.contains("  - acacia_log ×1 (closest ") && text.contains("; 3 more placed by players (Gasade 3), closest "), text);
+        });
+    }
+
     @GameTest
     public void placedFileRoundTripsAndACorruptFileIsKeptAside(GameTestHelper helper) throws Exception {
         Path dir = Files.createTempDirectory("vml-placed");
@@ -343,12 +554,16 @@ public class PlacedGameTests {
             index.put(Level.OVERWORLD, new BlockPos(10, 64, -5), Blocks.SPRUCE_PLANKS, GASADE, "Gasade", 1_000L);
             index.put(Level.OVERWORLD, new BlockPos(10, -60, 300_000), Blocks.OAK_DOOR, GASADE, "Gasade", 2_000L);
             index.put(Level.NETHER, new BlockPos(-3, 40, 7), Blocks.COBBLESTONE, LYSA, "Lysa", 3_000L);
+            index.restore(Level.OVERWORLD, new BlockPos(1, 70, 1), new Placed.Entry(Blocks.DIRT, LYSA, 5_000L, true));
             index.save();
             helper.assertTrue(Files.exists(file) && !Files.exists(dir.resolve("placed.dat.tmp")), "placed.dat written via a temp file");
 
             Placed loaded = new Placed(file);
             loaded.load();
-            helper.assertTrue(loaded.size() == 3, "loaded " + loaded.size() + " entries");
+            helper.assertTrue(loaded.size() == 4, "loaded " + loaded.size() + " entries");
+            Placed.Entry step = loaded.entry(Level.OVERWORLD, new BlockPos(1, 70, 1));
+            helper.assertTrue(step != null && step.route() && step.block() == Blocks.DIRT, "route step entry " + step);
+            helper.assertFalse(planksOf(loaded).route(), "a plain placement is no route step");
             Placed.Entry planks = loaded.entry(Level.OVERWORLD, new BlockPos(10, 64, -5));
             helper.assertTrue(planks != null && planks.block() == Blocks.SPRUCE_PLANKS && planks.placer().equals(GASADE) && planks.at() == 1_000L,
                     "planks entry " + planks);
@@ -359,6 +574,35 @@ public class PlacedGameTests {
                     "nether entry " + nether);
             helper.assertTrue("Gasade".equals(loaded.name(GASADE)) && "Lysa".equals(loaded.name(LYSA)), "placer names");
             helper.assertTrue(loaded.entry(Level.NETHER, new BlockPos(10, 64, -5)) == null, "dimensions stay apart");
+
+            // A file of version 1 (no route flags) still loads.
+            java.io.ByteArrayOutputStream v1 = new java.io.ByteArrayOutputStream();
+            try (java.io.DataOutputStream out = new java.io.DataOutputStream(new java.util.zip.GZIPOutputStream(v1))) {
+                out.writeInt(0x564D4C50);
+                out.writeInt(1);
+                out.writeInt(1);
+                out.writeUTF("minecraft:glass");
+                out.writeInt(1);
+                out.writeLong(GASADE.getMostSignificantBits());
+                out.writeLong(GASADE.getLeastSignificantBits());
+                out.writeUTF("Gasade");
+                out.writeInt(1);
+                out.writeUTF("minecraft:overworld");
+                out.writeInt(1);
+                out.writeInt(2);
+                out.writeInt(65);
+                out.writeInt(2);
+                out.writeInt(0);
+                out.writeInt(0);
+                out.writeLong(7_000L);
+            }
+            Path old = dir.resolve("placed-v1.dat");
+            Files.write(old, v1.toByteArray());
+            Placed fromV1 = new Placed(old);
+            fromV1.load();
+            Placed.Entry glass = fromV1.entry(Level.OVERWORLD, new BlockPos(2, 65, 2));
+            helper.assertTrue(fromV1.size() == 1 && glass != null && glass.block() == Blocks.GLASS && !glass.route() && glass.at() == 7_000L,
+                    "version 1 entry " + glass);
 
             // A file cut off in the middle, a file that is not ours and a damaged palette count with nothing behind it:
             // kept aside, the index starts empty, and saving works again.

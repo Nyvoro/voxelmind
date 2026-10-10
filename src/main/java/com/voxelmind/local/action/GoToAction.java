@@ -37,7 +37,8 @@ public final class GoToAction extends BodyAction {
                 return;
             }
             startDistance = body.distanceTo(e);
-            if (startDistance <= 2.5) {
+            // Next to it, but not in a doorway the body opened: from there the walk first steps out and closes the door.
+            if (startDistance <= 2.5 && nav.clearOfDoors()) {
                 done("already next to " + et.label() + " (" + Math.round(startDistance) + "m)");
                 return;
             }
@@ -69,7 +70,9 @@ public final class GoToAction extends BodyAction {
                 failed(et.label() + " is gone");
                 return;
             }
-            if (ctx.body().distanceTo(e) <= 2.5) {
+            // Close enough, unless the body stands in a doorway it opened: then the route goes on past the door, where
+            // stopping closes it (a route never ends in a doorway).
+            if (ctx.body().distanceTo(e) <= 2.5 && nav.clearOfDoors()) {
                 done("arrived next to " + et.label() + " at " + Names.pos(ctx.body().blockPosition()) + routeWork());
                 return;
             }
@@ -89,6 +92,7 @@ public final class GoToAction extends BodyAction {
             String where = Names.pos(ctx.body().blockPosition());
             if (target instanceof Targets.EntityTarget et) {
                 double d = ctx.body().distanceTo(et.entity());
+                // A route never ends in a doorway; where it ends, the walk is over.
                 if (d <= 3.5) done("arrived next to " + et.label() + " at " + where + routeWork());
                 else {
                     lastPlanned = et.entity().blockPosition();

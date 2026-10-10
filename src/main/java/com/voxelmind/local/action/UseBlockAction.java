@@ -4,8 +4,10 @@ import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Hands;
 import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.body.PathFinder;
+import com.voxelmind.local.compat.Compat;
 import com.voxelmind.local.world.Names;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -18,6 +20,7 @@ import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -101,24 +104,28 @@ public final class UseBlockAction extends BodyAction {
         ItemStack handBefore = body.getMainHandItem().copy();
         AbstractContainerMenu menuBefore = body.containerMenu;
         boolean sleepingBefore = body.isSleeping();
+        GlobalPos spawnBefore = Compat.respawnPoint(body);
         InteractionResult result = Hands.use(body, level, hit);
         String used = "used " + Names.id(before.getBlock()) + " at " + Names.pos(target) + ": ";
+        // A bed or a charged respawn anchor moves the respawn point, even when nothing else changes.
+        String spawn = respawnChange(body, spawnBefore);
+        String spawnNote = spawn.isEmpty() ? "" : "; " + spawn;
         if (body.containerMenu != menuBefore) {
             body.closeContainer();
             failed(used + "it opened a screen, which was closed again at once; use_chest, craft and smelt work with chests, "
-                    + "crafting tables and furnaces");
+                    + "crafting tables and furnaces" + spawnNote);
             return;
         }
         // The sign editor is the client's screen; on the server it only reserves the sign for this body, which blocks
         // everyone else from editing it while the body stays close.
         if (level.getBlockEntity(target) instanceof SignBlockEntity sign && body.getUUID().equals(sign.getPlayerWhoMayEdit())) {
             sign.setAllowedPlayerEditor(null);
-            failed(used + "it opened the sign's text editor, which was closed again at once; you cannot write on signs");
+            failed(used + "it opened the sign's text editor, which was closed again at once; you cannot write on signs" + spawnNote);
             return;
         }
         if (!sleepingBefore && body.isSleeping()) {
             body.stopSleepInBed(true, true);
-            failed(used + "you lay down in it and got up again at once; sleep lies down in a bed until morning");
+            failed(used + "you lay down in it and got up again at once; sleep lies down in a bed until morning" + spawnNote);
             return;
         }
         List<String> changes = new ArrayList<>();
@@ -130,9 +137,21 @@ public final class UseBlockAction extends BodyAction {
         }
         ItemStack handAfter = body.getMainHandItem();
         if (!ItemStack.matches(handBefore, handAfter)) changes.add("main hand " + Names.stack(handBefore) + " -> " + Names.stack(handAfter));
+        if (!spawn.isEmpty()) changes.add(spawn);
         if (!changes.isEmpty()) done(used + String.join("; ", changes));
-        else if (result.consumesAction()) done(used + "no state change; the game accepted the use");
+        else if (result.consumesAction()) done(used + "the block did not change; the game accepted the use");
         else failed(used + "nothing changed");
+    }
+
+    /** "your respawn point is now (x,y,z) in overworld (was the world spawn)" when it moved since {@code before}, else "". */
+    static String respawnChange(CompanionPlayer body, @Nullable GlobalPos before) {
+        GlobalPos after = Compat.respawnPoint(body);
+        if (java.util.Objects.equals(before, after)) return "";
+        return "your respawn point is now " + spawnText(after) + " (was " + spawnText(before) + ")";
+    }
+
+    private static String spawnText(@Nullable GlobalPos point) {
+        return point == null ? "the world spawn" : Names.pos(point.pos()) + " in " + point.dimension().identifier().getPath();
     }
 
     /** "open false -> true" for every property that differs; "it became farmland" when the block itself changed. */

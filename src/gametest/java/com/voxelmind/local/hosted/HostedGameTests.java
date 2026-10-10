@@ -7,6 +7,7 @@ import com.voxelmind.local.body.CompanionConnection;
 import com.voxelmind.local.companion.Companion;
 import com.voxelmind.local.companion.CompanionManager;
 import com.voxelmind.local.mind.Timeline;
+import com.voxelmind.local.world.Placed;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -189,6 +190,12 @@ public class HostedGameTests {
         Companion c = bring(helper, owner, "builder");
         BuilderMind b = (BuilderMind) c.hosted;
         BlockPos o = owner.blockPosition();
+        ServerLevel level = helper.getLevel();
+        // Glass a player placed where the fill goes: the fill replaces it, the undo puts it back, in the world and the index.
+        BlockPos glass = o.offset(0, 0, 1);
+        level.setBlockAndUpdate(glass, Blocks.GLASS.defaultBlockState());
+        UUID gasade = UUID.randomUUID();
+        Placed.of(level).record(level, glass, gasade, "Gasade");
         HostedMind.Outcome now = b.tool("fill", args("anchor", "owner_front", "distance", 1, "width", 3, "depth", 2, "height", 2, "block", "minecraft:oak_planks"));
         helper.assertTrue(now == null, "the fill runs on the server clock: " + now);
         helper.assertTrue(b.tool("fill", args("width", 3, "depth", 3, "height", 3, "block", "tnt")).text().contains("not available"), "tnt is refused");
@@ -201,10 +208,23 @@ public class HostedGameTests {
                     if (!helper.getLevel().getBlockState(p).is(Blocks.OAK_PLANKS)) helper.fail("no planks at " + p);
                 }
                 if (!timelineHas(c, "result", "12 blocks changed", "undo target \"e")) helper.fail("receipt: " + c.state.timeline.last(5));
+                // The filled blocks are placed by the Builder, the glass among them too now.
+                for (int x = -1; x <= 1; x++) for (int y = 0; y <= 1; y++) for (int z = 1; z <= 2; z++) {
+                    String placer = Placed.placer(level, o.offset(x, y, z));
+                    if (!c.name().equals(placer)) helper.fail("filled block at " + o.offset(x, y, z) + " placed by " + placer);
+                }
                 HostedMind.Outcome undo = b.tool("undo", args("target", "last"));
                 if (undo == null || !undo.ok() || !undo.text().contains("12 blocks restored")) helper.fail("undo: " + (undo == null ? null : undo.text()));
                 for (int x = -1; x <= 1; x++) for (int y = 0; y <= 1; y++) for (int z = 1; z <= 2; z++) {
-                    if (!helper.getLevel().getBlockState(o.offset(x, y, z)).isAir()) helper.fail("undo left a block at " + o.offset(x, y, z));
+                    BlockPos p = o.offset(x, y, z);
+                    if (p.equals(glass)) {
+                        if (!level.getBlockState(p).is(Blocks.GLASS) || !"Gasade".equals(Placed.placer(level, p))) {
+                            helper.fail("undo did not put Gasade's glass back: " + level.getBlockState(p) + ", placer " + Placed.placer(level, p));
+                        }
+                        continue;
+                    }
+                    if (!helper.getLevel().getBlockState(p).isAir()) helper.fail("undo left a block at " + p);
+                    if (Placed.of(level).entry(level.dimension(), p) != null) helper.fail("undo left an index entry at " + p);
                 }
                 leave(helper, owner, c);
                 helper.succeed();

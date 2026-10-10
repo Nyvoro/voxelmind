@@ -46,11 +46,20 @@ public final class Sensory {
 
     private Sensory() {}
 
+    /** Blocks of one kind in view: those no player placed, and apart from them those players placed, by placer. */
     private static final class Agg {
         int count;
         BlockPos closest;
         double dist = Double.MAX_VALUE;
         BlockState closestState;
+        int placed;
+        final Map<String, Integer> placedBy = new LinkedHashMap<>();
+        BlockPos placedClosest;
+        double placedDist = Double.MAX_VALUE;
+
+        double nearest() {
+            return Math.min(dist, placedDist);
+        }
     }
 
     public static String render(CompanionPlayer body, UUID ownerId, String ownerName, String wokeBy, String bodyAction) {
@@ -222,6 +231,17 @@ public final class Sensory {
                     if (!feature && !Resources.exposed(level, cursor)) continue;
                     double d = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     Agg agg = (feature ? features : resources).computeIfAbsent(key, k -> new Agg());
+                    // A resource a player placed is counted apart: gather and mine_block by type leave it.
+                    String placer = feature ? null : Placed.placer(level, cursor);
+                    if (placer != null) {
+                        agg.placed++;
+                        agg.placedBy.merge(placer, 1, Integer::sum);
+                        if (d < agg.placedDist) {
+                            agg.placedDist = d;
+                            agg.placedClosest = cursor.immutable();
+                        }
+                        continue;
+                    }
                     agg.count++;
                     if (d < agg.dist) {
                         agg.dist = d;
@@ -234,10 +254,20 @@ public final class Sensory {
         Vec3 me = body.position();
         if (!resources.isEmpty()) {
             out.append("Resources you can see within ").append(SCAN_H).append(" blocks:\n");
-            resources.entrySet().stream().sorted(Comparator.comparingDouble(e -> e.getValue().dist)).limit(14).forEach(e ->
-                    out.append("  - ").append(e.getKey()).append(" ×").append(e.getValue().count).append(" (closest ")
-                            .append(Math.round(e.getValue().dist)).append("m ").append(Names.direction(me, Vec3.atCenterOf(e.getValue().closest)))
-                            .append(" at ").append(Names.pos(e.getValue().closest)).append(")\n"));
+            resources.entrySet().stream().sorted(Comparator.comparingDouble(e -> e.getValue().nearest())).limit(14).forEach(e -> {
+                Agg agg = e.getValue();
+                // "oak_log ×4 (closest …); 86 more placed by players (Robin 86), closest …" or "oak_log ×86, all placed by players (…), closest …"
+                String placed = agg.placed == 0 ? "" : "placed by players (" + Placed.list(agg.placedBy, " ", 3) + "), closest "
+                        + Math.round(agg.placedDist) + "m " + Names.direction(me, Vec3.atCenterOf(agg.placedClosest)) + " at " + Names.pos(agg.placedClosest);
+                out.append("  - ").append(e.getKey());
+                if (agg.count == 0) {
+                    out.append(" ×").append(agg.placed).append(", all ").append(placed).append('\n');
+                    return;
+                }
+                out.append(" ×").append(agg.count).append(" (closest ").append(Math.round(agg.dist)).append("m ")
+                        .append(Names.direction(me, Vec3.atCenterOf(agg.closest))).append(" at ").append(Names.pos(agg.closest)).append(')')
+                        .append(agg.placed == 0 ? "" : "; " + agg.placed + " more " + placed).append('\n');
+            });
         }
         if (!features.isEmpty()) {
             out.append("Nearby: ");

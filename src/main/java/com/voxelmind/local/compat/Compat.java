@@ -137,6 +137,20 @@ public final class Compat {
         *///?}
     }
 
+    /** The block a player respawns at, with its dimension; null when it respawns at the world spawn. */
+    public static net.minecraft.core.@Nullable GlobalPos respawnPoint(ServerPlayer player) {
+        //? if >=1.21.9 {
+        ServerPlayer.RespawnConfig config = player.getRespawnConfig();
+        return config == null ? null : config.respawnData().globalPos();
+        //?} else if >=1.21.5 {
+        /*ServerPlayer.RespawnConfig config = player.getRespawnConfig();
+        return config == null ? null : net.minecraft.core.GlobalPos.of(config.dimension(), config.pos());
+        *///?} else {
+        /*net.minecraft.core.BlockPos pos = player.getRespawnPosition();
+        return pos == null ? null : net.minecraft.core.GlobalPos.of(player.getRespawnDimension(), pos);
+        *///?}
+    }
+
     /** The server level a player is in (ServerPlayer.level() only returns ServerLevel from 1.21.6 on). */
     public static ServerLevel level(ServerPlayer player) {
         //? if >=1.21.6 {

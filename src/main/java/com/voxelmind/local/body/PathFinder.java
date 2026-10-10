@@ -1,15 +1,21 @@
 package com.voxelmind.local.body;
 
+import com.voxelmind.local.world.Names;
+import com.voxelmind.local.world.Placed;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.LeverBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.AttachFace;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.Nullable;
@@ -23,9 +29,10 @@ import java.util.function.Predicate;
 /**
  * A* over standing positions of a player-sized body. Walking mode: walk, diagonal
  * walk, one-block jumps, drops of up to three blocks, swimming, and straight through
- * doors and fence gates (closed ones the body opens by hand). Digging mode adds
- * mining through natural terrain and building one-block pillar steps with
- * carried blocks; their cost is the real break time.
+ * doors and fence gates (closed ones the body opens by hand, closed iron doors through
+ * a button or lever beside them). Digging mode adds mining through natural terrain and
+ * the body's own pillar steps, and building one-block pillar steps with carried blocks;
+ * their cost is the real break time. Blocks a player placed are never dug.
  */
 public final class PathFinder {
     private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
@@ -34,9 +41,26 @@ public final class PathFinder {
     /** Extra cost per closed door half or gate on a step: the body stops and opens it first. */
     private static final double CLOSED_DOOR = 1.0;
 
-    /** Walking only, or also digging/building for a given body. */
-    public record Mode(boolean dig, boolean pillar, @Nullable CompanionPlayer body, @Nullable Predicate<BlockPos> protect) {
-        public static final Mode WALK = new Mode(false, false, null, null);
+    /**
+     * Walking only, or also digging/building for a given body. {@code blocked}, when given, learns the first block a
+     * player placed that a digging move would have had to break.
+     */
+    public record Mode(boolean dig, boolean pillar, @Nullable CompanionPlayer body, @Nullable Predicate<BlockPos> protect,
+                       @Nullable Blocked blocked) {
+        public static final Mode WALK = new Mode(false, false, null, null, null);
+    }
+
+    /** The first block a player placed that stood in a digging search's way: what, where and who placed it. */
+    public static final class Blocked {
+        private @Nullable String text;
+
+        void note(BlockState state, BlockPos pos, String placer) {
+            if (text == null) text = Names.id(state.getBlock()) + " at " + Names.pos(pos) + " placed by " + placer;
+        }
+
+        public @Nullable String text() {
+            return text;
+        }
     }
 
     public record Result(List<BlockPos> path, boolean reachesGoal, int expanded) {
@@ -148,12 +172,12 @@ public final class PathFinder {
                 continue;
             }
             // Through a door or fence gate, level or one step up.
-            double door = through(level, side, axis);
+            double door = through(level, pos, side, axis);
             if (door < BLOCKED && isFloor(level, side.below())) {
                 out.add(new Step(side, 1.0 + door));
                 continue;
             }
-            door = through(level, up, axis);
+            door = through(level, pos, up, axis);
             if (door < BLOCKED && passable(level, pos.above(2)) && isFloor(level, side)) {
                 out.add(new Step(up, 2.0 + door));
                 continue;
@@ -218,8 +242,16 @@ public final class PathFinder {
         if (!mode.dig() || mode.body() == null || !(level instanceof ServerLevel server)) return BLOCKED;
         if (mode.protect() != null && mode.protect().test(cell)) return BLOCKED;
         BlockState state = level.getBlockState(cell);
-        // Natural terrain only: never a block a player placed, whatever its type.
-        if (!Hands.isNaturalTerrain(state) || !Hands.dryToBreak(server, cell) || com.voxelmind.local.world.Placed.isPlaced(server, cell)) return BLOCKED;
+        // Natural terrain and the body's own pillar steps only: never another block a player placed, whatever its type.
+        boolean ownStep = Placed.isRouteStep(server, cell, mode.body().getUUID());
+        if (!ownStep && !Hands.isNaturalTerrain(state) || !Hands.dryToBreak(server, cell)) return BLOCKED;
+        if (!ownStep) {
+            String placer = Placed.placer(server, cell);
+            if (placer != null) {
+                if (mode.blocked() != null) mode.blocked().note(state, cell, placer);
+                return BLOCKED;
+            }
+        }
         float ticks = Hands.breakTicks(mode.body(), server, cell, state);
         if (ticks == Float.MAX_VALUE || ticks > 400) return BLOCKED;
         return 1.0 + ticks / 10.0;
@@ -281,23 +313,78 @@ public final class PathFinder {
     }
 
     /**
-     * Cost of standing up in {@code feet} on a step along {@code axis} through a door or fence gate: 0 through an open
-     * one, CLOSED_DOOR per closed half or gate the body opens by hand first, BLOCKED otherwise. A door is passed only
-     * through its opening (along its facing axis, feet in the lower half, head in the upper), where the panel of the
-     * open door lies at the side of the cell; an open fence gate has nothing left to bump into.
+     * Cost of standing up in {@code feet}, coming from {@code from}, on a step along {@code axis} through a door or fence
+     * gate: 0 through an open one, CLOSED_DOOR per closed half or gate the body opens by hand first, CLOSED_DOOR for a
+     * closed iron door with a button or lever beside it on {@code from}'s side, BLOCKED otherwise. A door is passed only
+     * through its opening (along its facing axis, feet in the lower half, head in the upper), where the panel of the open
+     * door lies at the side of the cell; an open fence gate has nothing left to bump into.
      */
-    private static double through(Level level, BlockPos feet, Direction.Axis axis) {
-        return through(level, feet, axis, DoubleBlockHalf.LOWER) + through(level, feet.above(), axis, DoubleBlockHalf.UPPER);
+    private static double through(Level level, BlockPos from, BlockPos feet, Direction.Axis axis) {
+        return through(level, from, feet, axis, DoubleBlockHalf.LOWER) + through(level, from, feet.above(), axis, DoubleBlockHalf.UPPER);
     }
 
-    private static double through(Level level, BlockPos cell, Direction.Axis axis, DoubleBlockHalf half) {
+    private static double through(Level level, BlockPos from, BlockPos cell, Direction.Axis axis, DoubleBlockHalf half) {
         BlockState state = level.getBlockState(cell);
         if (state.getBlock() instanceof DoorBlock) {
             if (doorAxis(state) != axis || state.getValue(DoorBlock.HALF) != half) return BLOCKED;
-            return state.getValue(DoorBlock.OPEN) ? 0 : opensByHand(state) ? CLOSED_DOOR : BLOCKED;
+            if (state.getValue(DoorBlock.OPEN)) return 0;
+            if (opensByHand(state)) return CLOSED_DOOR;
+            // A closed iron door is decided once, at its lower half: passable when a switch on this side opens it.
+            if (half == DoubleBlockHalf.UPPER) return 0;
+            return switchFor(level, cell, from) != null ? CLOSED_DOOR : BLOCKED;
         }
         if (opensByHand(state)) return CLOSED_DOOR;
         return passable(level, cell) ? 0 : BLOCKED;
+    }
+
+    /**
+     * A button or lever, not switched on, that opens the closed door at {@code door} (either half) from {@code from}'s
+     * side, the way redstone powers a door: the switch stands next to a door half, or is attached to a solid block next
+     * to one. Null when there is none.
+     */
+    public static @Nullable BlockPos switchFor(Level level, BlockPos door, BlockPos from) {
+        BlockState state = level.getBlockState(door);
+        if (!(state.getBlock() instanceof DoorBlock)) return null;
+        BlockPos lower = state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER ? door.below() : door;
+        Direction.Axis axis = state.getValue(DoorBlock.FACING).getAxis();
+        int side = Integer.signum(from.get(axis) - lower.get(axis));
+        if (side == 0) return null;
+        for (BlockPos half : new BlockPos[]{lower, lower.above()}) {
+            for (Direction d : Direction.values()) {
+                BlockPos next = half.relative(d);
+                if (next.equals(lower) || next.equals(lower.above())) continue;
+                BlockState nextState = level.getBlockState(next);
+                if (isSwitch(nextState)) {
+                    if (Integer.signum(next.get(axis) - lower.get(axis)) == side) return next;
+                    continue;
+                }
+                if (!nextState.isRedstoneConductor(level, next)) continue;
+                for (Direction e : Direction.values()) {
+                    BlockPos at = next.relative(e);
+                    BlockState switchState = level.getBlockState(at);
+                    if (isSwitch(switchState) && at.relative(attachedTo(switchState)).equals(next)
+                            && Integer.signum(at.get(axis) - lower.get(axis)) == side) return at;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** A button or lever that is not switched on. */
+    private static boolean isSwitch(BlockState state) {
+        return (state.is(BlockTags.BUTTONS) || state.getBlock() instanceof LeverBlock) && !state.getValue(BlockStateProperties.POWERED);
+    }
+
+    /** A lever (rather than a button): it stays switched on until it is flipped back. */
+    public static boolean isLever(BlockState state) {
+        return state.getBlock() instanceof LeverBlock;
+    }
+
+    /** The side of a button or lever that holds the block it is attached to. */
+    private static Direction attachedTo(BlockState state) {
+        AttachFace face = state.getValue(BlockStateProperties.ATTACH_FACE);
+        return face == AttachFace.FLOOR ? Direction.DOWN : face == AttachFace.CEILING ? Direction.UP
+                : state.getValue(BlockStateProperties.HORIZONTAL_FACING).getOpposite();
     }
 
     /** A door or fence gate: walked through, never stood in, so it can be closed again. */

@@ -8,6 +8,7 @@ import com.voxelmind.local.action.GoToAction;
 import com.voxelmind.local.action.UseBlockAction;
 import com.voxelmind.local.body.CompanionConnection;
 import com.voxelmind.local.body.CompanionPlayer;
+import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.world.Inv;
 import com.voxelmind.local.world.Names;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -18,11 +19,13 @@ import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -32,6 +35,7 @@ import net.minecraft.world.level.block.NoteBlock;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoorHingeSide;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
@@ -552,6 +556,91 @@ public class DoorGameTests {
             assertEnded(helper, action, BodyAction.Outcome.DONE);
             helper.assertTrue(at(helper, body).getX() >= 5, "ended at " + at(helper, body) + "; " + action.result());
             helper.assertTrue(isOpen(helper, DOOR), "the door was closed on the armor stand in the doorway; " + action.result());
+            // The result names the door it left open, and why.
+            helper.assertTrue(action.result().contains("; oak_door at " + Names.pos(helper.absolutePos(DOOR)) + " stays open: armor_stand stands in it"),
+                    action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void goingToSomeoneInsideClosesTheDoorBehind(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        // Someone two blocks past the door's middle: close enough already while the body stands in the doorway.
+        Entity stand = helper.spawn(EntityTypes.ARMOR_STAND, new BlockPos(2, 1, 2));
+        CompanionPlayer body = spawn(helper, new BlockPos(7, 1, 2));
+        boolean[] opened = watchOpen(helper, DOOR);
+        BodyAction action = run(helper, body, new GoToAction("go_to(stand)", "#" + stand.getId()));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(opened[0], "the door was never opened; " + action.result());
+            helper.assertTrue(at(helper, body).getX() <= 3, "ended at " + at(helper, body) + ", not inside; " + action.result());
+            helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
+            assertRoomIntact(helper);
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void walksThroughAnIronDoorWithAButton(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.IRON_DOOR);
+        // A stone button inside on the wall block beside the door: it powers the wall block, which opens the door.
+        helper.setBlock(new BlockPos(3, 1, 3), Blocks.STONE_BUTTON.defaultBlockState().setValue(BlockStateProperties.ATTACH_FACE, AttachFace.WALL)
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.WEST));
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        Map<Item, Integer> carried = carry(body);
+        boolean[] opened = watchOpen(helper, DOOR);
+        BodyAction action = run(helper, body, new GoToAction("go_to(outside)", abs(helper, 7, 1, 2)));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(at(helper, body).getX() >= 5, "ended at " + at(helper, body) + "; " + action.result());
+            helper.assertTrue(opened[0], "the iron door was never opened; " + action.result());
+            // The button springs back and the iron door closes by itself.
+            helper.assertFalse(isOpen(helper, DOOR), "the iron door is still open; " + action.result());
+            assertRoomIntact(helper);
+            helper.assertTrue(Inv.snapshot(body).equals(carried), "inventory changed to " + Inv.snapshot(body) + "; " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 500)
+    public void leavingTheWorldClosesTheDoorItStandsIn(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction walk = new GoToAction("go_to(outside)", abs(helper, 7, 1, 2));
+        // Dismissed, its owner gone or the world closing: the companion leaves while it stands in the doorway.
+        BodyAction leave = new BodyAction("leave", "leave()") {
+            @Override
+            protected void onStart(ActionContext ctx) {
+                Navigator.leave(ctx.body());
+                done("left");
+            }
+
+            @Override
+            protected void onTick(ActionContext ctx) {
+            }
+        };
+        boolean[] seen = stopAt(helper, body, DOOR, 0.5, 1.0, walk, leave);
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(seen[0] && seen[1], "the walk did not stop in the open doorway; " + walk.result());
+            assertEnded(helper, leave, BodyAction.Outcome.DONE);
+            helper.assertFalse(isOpen(helper, DOOR), "the door the body stood in stayed open when it left");
+        });
+    }
+
+    @GameTest(maxTicks = 300)
+    public void useBlockOnABedNamesTheNewRespawnPoint(GameTestHelper helper) {
+        floor(helper);
+        BlockState foot = Names.block("red_bed").defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH).setValue(BedBlock.PART, BedPart.FOOT);
+        helper.setBlock(new BlockPos(4, 1, 2), foot);
+        helper.setBlock(new BlockPos(4, 1, 3), foot.setValue(BedBlock.PART, BedPart.HEAD));
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction action = run(helper, body, new UseBlockAction("use_block(bed)", helper.absolutePos(new BlockPos(4, 1, 2))));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(action.finished(), "action still running: " + action.progress());
+            // By day nothing else changes; by night the body lies down and gets up again: either way the point moved.
+            helper.assertTrue(action.result().contains("your respawn point is now (") && action.result().contains(" in overworld (was the world spawn)"),
+                    action.result());
         });
     }
 

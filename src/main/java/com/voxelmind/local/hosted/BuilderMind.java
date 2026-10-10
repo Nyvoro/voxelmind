@@ -245,6 +245,8 @@ public final class BuilderMind extends HostedMind {
         Scheduler.Run run = scheduler.start(id, label, steps, level, done -> {
             boolean ok = done.results().stream().allMatch(Scheduler.StepResult::ok) && !done.cancelled();
             int changed = entry == null ? -1 : EditHistory.countChanged(entry);
+            // The blocks the edit set are placed by the Builder, the cells it cleared hold no placed block any more.
+            if (entry != null) EditHistory.recordPlaced(entry, c.state.id, c.name());
             if (entry != null) {
                 entry.changed = changed;
                 entry.errors = !ok;

@@ -8,6 +8,7 @@ import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Placed;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
@@ -155,7 +156,18 @@ final class BlockBreaker {
         }
         if (current.equals(target) && hand == null) {
             BlockPos obstruction = obstruction(body, target);
-            if (obstruction != null) {
+            // The other half of a door, bed or tall plant that is the target goes with the target itself.
+            if (obstruction != null && !obstruction.equals(Placed.partner(level.getBlockState(target), target))) {
+                // Only the target is broken whatever it is (it was chosen); in its way only what no player placed and no
+                // door, gate or trapdoor.
+                BlockState in = level.getBlockState(obstruction);
+                String placer = Placed.placer(level, obstruction);
+                if (placer != null || opens(in)) {
+                    fail(Names.id(in.getBlock()) + " at " + Names.pos(obstruction) + (placer == null ? "" : ", placed by " + placer + ",")
+                            + " is in the way to " + targetName + " at " + Names.pos(target) + "; blocks in the way are mined only when no "
+                            + "player placed them and they are no door, gate or trapdoor");
+                    return;
+                }
                 if (brokeInWay.size() >= MAX_OBSTRUCTIONS) {
                     fail("too many blocks between you and " + targetName + " at " + Names.pos(target));
                     return;
@@ -238,6 +250,11 @@ final class BlockBreaker {
         else if (!dropped) out.append("; no drop — this block needs a better tool to drop anything");
         else out.append("; nothing picked up");
         return out.toString();
+    }
+
+    /** Doors, fence gates and trapdoors: never mined because they stand in the way. */
+    private static boolean opens(BlockState state) {
+        return state.is(BlockTags.DOORS) || state.is(BlockTags.FENCE_GATES) || state.is(BlockTags.TRAPDOORS);
     }
 
     private static BlockPos obstruction(CompanionPlayer body, BlockPos target) {

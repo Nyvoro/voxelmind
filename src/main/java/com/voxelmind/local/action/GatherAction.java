@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,13 +25,15 @@ import java.util.Set;
 
 /**
  * gather: collects a quantity of a resource by mining exposed matching blocks
- * nearby, or by hunting the creature that drops it. Counts what actually
- * arrives in the inventory.
+ * nearby that no player placed (all of them with include_placed), or by hunting
+ * the creature that drops it. Counts what actually arrives in the inventory and
+ * names the broken blocks a player had placed.
  */
 public final class GatherAction extends BodyAction {
     private static final int SEARCH = 24;
     private final String resourceText;
     private final int amount;
+    private final boolean includePlaced;
     private Resources.Resource resource;
     private Map<Item, Integer> start;
     private final Set<Long> skip = new HashSet<>();
@@ -42,11 +45,25 @@ public final class GatherAction extends BodyAction {
     private String lastFailure = "";
     private int blocksMined;
     private int kills;
+    private int placedBroken;
+    private final Map<String, Integer> placedBy = new HashMap<>();
+    private final Map<String, Integer> placedTypes = new HashMap<>();
 
     public GatherAction(String call, String resourceText, int amount) {
+        this(call, resourceText, amount, false);
+    }
+
+    /** {@code includePlaced}: blocks a player placed or planted are taken too. */
+    public GatherAction(String call, String resourceText, int amount, boolean includePlaced) {
         super("gather", call);
         this.resourceText = resourceText;
         this.amount = Math.max(1, Math.min(64, amount));
+        this.includePlaced = includePlaced;
+    }
+
+    /** A block this gather may take at {@code pos}: one no player placed, or any with include_placed. */
+    private boolean takes(ActionContext ctx, BlockPos pos) {
+        return includePlaced || !Placed.isPlaced(ctx.level(), pos);
     }
 
     @Override
@@ -59,7 +76,7 @@ public final class GatherAction extends BodyAction {
         start = Inv.snapshot(ctx.body());
         if (resource.blocks() != null && resource.needsTool()) {
             BlockPos sample = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(),
-                    (p, st) -> resource.blocks().test(st) && !Placed.isPlaced(ctx.level(), p), SEARCH);
+                    (p, st) -> resource.blocks().test(st) && takes(ctx, p), SEARCH);
             if (sample != null) {
                 BlockState state = ctx.level().getBlockState(sample);
                 if (!canHarvest(ctx.body(), state)) {
@@ -97,7 +114,7 @@ public final class GatherAction extends BodyAction {
         Map<Item, Integer> counts = counted(ctx);
         int have = total(counts);
         if (have >= amount && breaker == null && collectTicks == 0) {
-            done("inventory gained " + have + " of requested " + amount + " " + resource.label() + " (" + Inv.describe(counts) + ")");
+            done("inventory gained " + have + " of requested " + amount + " " + resource.label() + " (" + Inv.describe(counts) + ")" + placedNote());
             return;
         }
         if (ctx.body().getInventory().getFreeSlot() < 0 && Inv.usedSlots(ctx.body()) >= Inv.MAIN_SIZE) {
@@ -107,6 +124,13 @@ public final class GatherAction extends BodyAction {
 
         if (breaker != null) {
             BlockBreaker.State s = breaker.tick();
+            if (s == BlockBreaker.State.DONE || s == BlockBreaker.State.FAILED) {
+                for (BlockBreaker.PlacedBlock p : breaker.brokePlaced()) {
+                    placedBroken++;
+                    placedBy.merge(p.placer(), 1, Integer::sum);
+                    placedTypes.merge(p.block(), 1, Integer::sum);
+                }
+            }
             if (s == BlockBreaker.State.DONE) {
                 blocksMined++;
                 failures = 0;
@@ -141,9 +165,10 @@ public final class GatherAction extends BodyAction {
         if (resource.blocks() != null) {
             BlockPos next = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(),
                     (p, st) -> resource.blocks().test(st) && !skip.contains(p.asLong()) && Resources.exposed(ctx.level(), p)
-                            && !Placed.isPlaced(ctx.level(), p), SEARCH);
+                            && takes(ctx, p), SEARCH);
             if (next == null) {
-                stopPartial(ctx, counts, "no more exposed " + resource.label() + " within " + SEARCH + " blocks that no player placed");
+                stopPartial(ctx, counts, includePlaced ? "no more exposed " + resource.label() + " within " + SEARCH + " blocks"
+                        : "no more exposed " + resource.label() + " within " + SEARCH + " blocks that no player placed" + placedLeft(ctx));
                 return;
             }
             breaker = new BlockBreaker(ctx, nav, next);
@@ -174,9 +199,32 @@ public final class GatherAction extends BodyAction {
     private void stopPartial(ActionContext ctx, Map<Item, Integer> counts, String reason) {
         int have = total(counts);
         String text = "inventory gained " + have + " of requested " + amount + " " + resource.label()
-                + (counts.isEmpty() ? "" : " (" + Inv.describe(counts) + ")") + "; stopped: " + reason;
+                + (counts.isEmpty() ? "" : " (" + Inv.describe(counts) + ")") + placedNote() + "; stopped: " + reason;
         if (have > 0) done(text);
         else failed(text);
+    }
+
+    /** "; 3 of the broken blocks were placed (Gasade 3): carrots ×3", or "" when none was. */
+    private String placedNote() {
+        if (placedBroken == 0) return "";
+        return "; " + placedBroken + " of the broken blocks were placed (" + Placed.list(placedBy, " ", 4) + "): " + Placed.list(placedTypes, " ×", 6);
+    }
+
+    /** The exposed matching blocks in range that players placed, which this gather left: "; 40 in range were placed (…)". */
+    private String placedLeft(ActionContext ctx) {
+        Map<String, Integer> by = new HashMap<>();
+        int[] n = {0};
+        Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), (p, st) -> {
+            if (!resource.blocks().test(st) || skip.contains(p.asLong()) || !Resources.exposed(ctx.level(), p)) return false;
+            String placer = Placed.placer(ctx.level(), p);
+            if (placer != null) {
+                n[0]++;
+                by.merge(placer, 1, Integer::sum);
+            }
+            return false;
+        }, SEARCH);
+        return n[0] == 0 ? "" : "; " + n[0] + " exposed " + resource.label() + " in range were placed by players (" + Placed.list(by, " ", 4)
+                + "), which include_placed true also takes";
     }
 
     @Override

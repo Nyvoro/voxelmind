@@ -3,6 +3,7 @@ package com.voxelmind.local.action;
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.world.Names;
+import com.voxelmind.local.world.Placed;
 import com.voxelmind.local.world.Resources;
 import com.voxelmind.local.world.Targets;
 import net.minecraft.core.BlockPos;
@@ -119,7 +120,9 @@ public final class ExploreAction extends BodyAction {
     private @Nullable String found(ActionContext ctx) {
         CompanionPlayer body = ctx.body();
         if (blockGoal != null) {
-            BlockPos pos = Targets.nearestBlock(ctx.level(), body.blockPosition(), blockGoal, 20);
+            // A block a player placed is not what explore looks out for: a log wall is no tree.
+            BlockPos pos = Targets.nearestBlock(ctx.level(), body.blockPosition(),
+                    (p, s) -> blockGoal.test(p, s) && !Placed.isPlaced(ctx.level(), p), 20);
             return pos == null ? null : "closest at " + Names.pos(pos) + ", " + Math.round(Math.sqrt(pos.distSqr(body.blockPosition()))) + "m away";
         }
         if (entityGoal != null) {
