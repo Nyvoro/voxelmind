@@ -234,9 +234,12 @@ public final class Navigator {
             double dx = node.getX() + 0.5 - pos.x;
             double dz = node.getZ() + 0.5 - pos.z;
             boolean sameLevel = Math.abs(pos.y - node.getY()) < 0.9 || (body.isInWater() && Math.abs(pos.y - node.getY()) < 1.6);
-            // A pillar step only counts once the body stands on the new block, not at the top of the jump.
-            boolean pillarStep = node.getX() == before.getX() && node.getZ() == before.getZ() && node.getY() > before.getY();
-            if (pillarStep && !(body.onGround() && feet().getY() >= node.getY())) break;
+            // A pillar step only counts once the body stands on the new block, not at the top of the jump; a step swum
+            // straight up out of water once the feet are in the new cell.
+            boolean straightUp = node.getX() == before.getX() && node.getZ() == before.getZ() && node.getY() > before.getY();
+            boolean swum = straightUp && PathFinder.isWater(level, before);
+            if (swum && feet().getY() < node.getY()) break;
+            if (straightUp && !swum && !(body.onGround() && feet().getY() >= node.getY())) break;
             double near = PathFinder.isDoorway(level, before) ? BEHIND_DOOR : 0.35;
             if (dx * dx + dz * dz < near * near && sameLevel) {
                 index++;
@@ -287,8 +290,9 @@ public final class Navigator {
         }
         breaker = null;
 
-        // Pillar step: jump and place a block where the feet were.
-        if (node.getX() == prev.getX() && node.getZ() == prev.getZ() && node.getY() == prev.getY() + 1) {
+        // Pillar step: jump and place a block where the feet were. Straight up out of water the body swims instead.
+        boolean straightUp = node.getX() == prev.getX() && node.getZ() == prev.getZ() && node.getY() == prev.getY() + 1;
+        if (straightUp && !PathFinder.isWater(level, prev)) {
             return pillar(level, prev);
         }
         // Dig-down step: the cell is open now; wait to fall into it.
@@ -306,7 +310,7 @@ public final class Navigator {
         motor.targetYaw = yaw;
         motor.targetPitch = 0f;
         float turn = Math.abs(Mth.wrapDegrees(yaw - body.getYRot()));
-        motor.forward = turn < 50 ? 1.0f : 0.15f;
+        motor.forward = straightUp && dx * dx + dz * dz < 0.09 ? 0f : turn < 50 ? 1.0f : 0.15f;
         motor.strafe = 0;
 
         boolean wantsUp = node.getY() > pos.y + 0.5;

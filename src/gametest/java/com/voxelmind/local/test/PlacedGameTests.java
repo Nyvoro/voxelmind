@@ -368,6 +368,27 @@ public class PlacedGameTests {
         });
     }
 
+    @GameTest(maxTicks = 300)
+    public void goingToTheAirAboveAWaterShaftSwimsUpAndEnds(GameTestHelper helper) {
+        floor(helper);
+        // A one-wide shaft: water from y=1 to y=3, two cells of air above it, a stone ceiling at y=6.
+        for (int y = 1; y <= 5; y++) {
+            for (BlockPos side : new BlockPos[]{new BlockPos(2, y, 3), new BlockPos(4, y, 3), new BlockPos(3, y, 2), new BlockPos(3, y, 4)}) {
+                natural(helper, side, Blocks.STONE.defaultBlockState());
+            }
+            if (y <= 3) helper.setBlock(new BlockPos(3, y, 3), Blocks.WATER);
+        }
+        natural(helper, new BlockPos(3, 6, 3), Blocks.STONE.defaultBlockState());
+        CompanionPlayer body = spawn(helper, new BlockPos(3, 1, 3));
+        BodyAction action = run(helper, body, new GoToAction("go_to(air)", abs(helper, 3, 4, 3), false));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(action.finished(), "the walk to the air is still running: " + action.progress());
+            helper.assertTrue(action.outcome() == BodyAction.Outcome.DONE, action.call() + " ended " + action.outcome() + ": " + action.result());
+            int head = body.blockPosition().getY() + 1;
+            helper.assertTrue(head >= helper.absolutePos(new BlockPos(3, 4, 3)).getY(), "the head is still under water; " + action.result());
+        });
+    }
+
     @GameTest(maxTicks = 100)
     public void sensoryNamesTheNearestAirWhenStoneClosesTheWaterAbove(GameTestHelper helper) {
         floor(helper);
