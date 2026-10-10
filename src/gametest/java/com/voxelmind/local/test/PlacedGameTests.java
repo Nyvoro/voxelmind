@@ -640,6 +640,32 @@ public class PlacedGameTests {
         });
     }
 
+    @GameTest(maxTicks = 600)
+    public void byTypeNoBlockIsMinedThatLavaTouches(GameTestHelper helper) {
+        floor(helper);
+        // The nearer coal ore lies under sealed-in lava, the farther one is dry.
+        natural(helper, new BlockPos(2, 1, 3), Blocks.COAL_ORE.defaultBlockState());
+        for (BlockPos seal : new BlockPos[]{new BlockPos(1, 2, 3), new BlockPos(3, 2, 3), new BlockPos(2, 2, 2), new BlockPos(2, 2, 4), new BlockPos(2, 3, 3)}) {
+            natural(helper, seal, Blocks.STONE.defaultBlockState());
+        }
+        helper.setBlock(new BlockPos(2, 2, 3), Blocks.LAVA);
+        natural(helper, new BlockPos(6, 1, 3), Blocks.COAL_ORE.defaultBlockState());
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 1));
+        body.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
+        BodyAction gather = new GatherAction("gather(coal,1)", "coal", 1, false);
+        BodyAction mine = new MineBlockAction("mine_block(coal_ore)", "coal_ore");
+        runSequence(helper, body, gather, mine);
+        finishWhen(helper, body, () -> {
+            assertDone(helper, gather);
+            helper.assertBlockPresent(Blocks.AIR, new BlockPos(6, 1, 3));
+            helper.assertTrue(mine.finished() && mine.outcome() == BodyAction.Outcome.FAILED, "mine_block: " + mine.outcome() + ": " + mine.result());
+            helper.assertTrue(mine.result().contains("and no water or lava touches; the nearest one, at ") && mine.result().contains(", has lava next to it"),
+                    mine.result());
+            helper.assertBlockPresent(Blocks.COAL_ORE, new BlockPos(2, 1, 3));
+            helper.assertBlockPresent(Blocks.LAVA, new BlockPos(2, 2, 3));
+        });
+    }
+
     @GameTest(maxTicks = 1200, skyAccess = true)
     public void gatherTakesAPlantedFieldOnlyWithIncludePlaced(GameTestHelper helper) {
         // A crop counts its produce: gathering wheat counts wheat, not the seeds the wheat block stands for as an item.
@@ -656,7 +682,7 @@ public class PlacedGameTests {
         runSequence(helper, body, refused, taken);
         finishWhen(helper, body, () -> {
             helper.assertTrue(refused.finished() && refused.outcome() == BodyAction.Outcome.FAILED, "gather: " + refused.outcome() + ": " + refused.result());
-            helper.assertTrue(refused.result().contains("that no player placed; 3 exposed carrots in range were placed by players (Gasade 3), "
+            helper.assertTrue(refused.result().contains("that no player placed and no water or lava touches; 3 exposed carrots in range were placed by players (Gasade 3), "
                     + "which include_placed true also takes"), refused.result());
             assertDone(helper, taken);
             helper.assertTrue(taken.result().contains(" of the broken blocks were placed (Gasade "), taken.result());

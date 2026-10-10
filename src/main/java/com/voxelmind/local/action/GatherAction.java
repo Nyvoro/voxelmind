@@ -1,6 +1,7 @@
 package com.voxelmind.local.action;
 
 import com.voxelmind.local.body.CompanionPlayer;
+import com.voxelmind.local.body.Hands;
 import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.world.Inv;
 import com.voxelmind.local.world.Names;
@@ -61,9 +62,12 @@ public final class GatherAction extends BodyAction {
         this.includePlaced = includePlaced;
     }
 
-    /** A block this gather may take at {@code pos}: one no player placed, or any with include_placed. */
+    /**
+     * A block this gather may take at {@code pos}: one no player placed (or any with include_placed) and no water or lava
+     * touches, which would flow onto the body once it is broken.
+     */
     private boolean takes(ActionContext ctx, BlockPos pos) {
-        return includePlaced || !Placed.isPlaced(ctx.level(), pos);
+        return (includePlaced || !Placed.isPlaced(ctx.level(), pos)) && Hands.fluidAt(ctx.level(), pos) == null;
     }
 
     @Override
@@ -167,8 +171,9 @@ public final class GatherAction extends BodyAction {
                     (p, st) -> resource.blocks().test(st) && !skip.contains(p.asLong()) && Resources.exposed(ctx.level(), p)
                             && takes(ctx, p), SEARCH);
             if (next == null) {
-                stopPartial(ctx, counts, includePlaced ? "no more exposed " + resource.label() + " within " + SEARCH + " blocks"
-                        : "no more exposed " + resource.label() + " within " + SEARCH + " blocks that no player placed" + placedLeft(ctx));
+                stopPartial(ctx, counts, "no more exposed " + resource.label() + " within " + SEARCH + " blocks"
+                        + (includePlaced ? "" : " that no player placed") + " and no water or lava touches" + (includePlaced ? "" : placedLeft(ctx))
+                        + wetLeft(ctx));
                 return;
             }
             breaker = new BlockBreaker(ctx, nav, next);
@@ -225,6 +230,24 @@ public final class GatherAction extends BodyAction {
         }, SEARCH);
         return n[0] == 0 ? "" : "; " + n[0] + " exposed " + resource.label() + " in range were placed by players (" + Placed.list(by, " ", 4)
                 + "), which include_placed true also takes";
+    }
+
+    /** The exposed matching blocks in range that water or lava touches, which this gather left: "; 2 in range have lava …". */
+    private String wetLeft(ActionContext ctx) {
+        int[] n = {0};
+        BlockPos[] first = {null};
+        String[] fluid = {null};
+        Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), (p, st) -> {
+            if (!resource.blocks().test(st) || skip.contains(p.asLong()) || !Resources.exposed(ctx.level(), p)) return false;
+            String f = Hands.fluidAt(ctx.level(), p);
+            if (f != null && n[0]++ == 0) {
+                first[0] = p.immutable();
+                fluid[0] = f;
+            }
+            return false;
+        }, SEARCH);
+        return n[0] == 0 ? "" : "; " + n[0] + " exposed " + resource.label() + " in range have water or lava next to them (" + fluid[0] + " at the one at "
+                + Names.pos(first[0]) + "), which mine_block takes by its coordinates";
     }
 
     @Override

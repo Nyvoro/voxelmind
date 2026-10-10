@@ -1,5 +1,6 @@
 package com.voxelmind.local.action;
 
+import com.voxelmind.local.body.Hands;
 import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Placed;
 import com.voxelmind.local.world.Resources;
@@ -34,19 +35,21 @@ public final class MineBlockAction extends BodyAction {
                 return;
             }
             // Prefer one you can see; otherwise the nearest one, digging through what is in the way. A block of the type
-            // means one from the world: blocks a player placed are only mined when named by their coordinates or with
-            // include_placed.
-            pos = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(),
-                    (p, s) -> s.is(block) && Resources.exposed(ctx.level(), p) && (includePlaced || !Placed.isPlaced(ctx.level(), p)), Targets.BLOCK_RANGE);
+            // means one from the world that is safe to break: blocks a player placed, and blocks that water or lava
+            // touches, are only mined when named by their coordinates (placed ones also with include_placed).
+            java.util.function.BiPredicate<BlockPos, net.minecraft.world.level.block.state.BlockState> takes = (p, s) -> s.is(block)
+                    && (includePlaced || !Placed.isPlaced(ctx.level(), p)) && Hands.fluidAt(ctx.level(), p) == null;
+            pos = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), (p, s) -> takes.test(p, s) && Resources.exposed(ctx.level(), p),
+                    Targets.BLOCK_RANGE);
+            if (pos == null) pos = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), takes, Targets.BLOCK_RANGE);
             if (pos == null) {
-                pos = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(),
-                        (p, s) -> s.is(block) && (includePlaced || !Placed.isPlaced(ctx.level(), p)), Targets.BLOCK_RANGE);
-            }
-            if (pos == null) {
-                BlockPos placed = includePlaced ? null : Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), s -> s.is(block), Targets.BLOCK_RANGE);
+                BlockPos other = Targets.nearestBlock(ctx.level(), ctx.body().blockPosition(), s -> s.is(block), Targets.BLOCK_RANGE);
+                String placer = other == null ? null : Placed.placer(ctx.level(), other);
+                String why = other == null ? "" : "; the nearest one, at " + Names.pos(other) + ", "
+                        + (placer != null && !includePlaced ? "was placed by " + placer + " (mine_block with its coordinates, or include_placed true, mines it)"
+                        : "has " + Hands.fluidAt(ctx.level(), other) + " next to it (mine_block with its coordinates mines it)");
                 failed("no " + Names.id(block) + " within " + Targets.BLOCK_RANGE + " blocks" + (includePlaced ? "" : " that no player placed")
-                        + (placed == null ? "" : "; the nearest one, at " + Names.pos(placed) + ", was placed by " + Placed.placer(ctx.level(), placed)
-                        + " (mine_block with its coordinates, or include_placed true, mines it)"));
+                        + " and no water or lava touches" + why);
                 return;
             }
         }
