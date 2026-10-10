@@ -222,6 +222,36 @@ public class DoorGameTests {
     }
 
     @GameTest(maxTicks = 400)
+    public void goingThroughADoorFromOutsideEndsJustInside(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(7, 1, 2));
+        BodyAction action = run(helper, body, new GoToAction("go_to(door, through)", abs(helper, DOOR.getX(), DOOR.getY(), DOOR.getZ()), true));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(at(helper, body).equals(DOOR.west()), "ended at " + at(helper, body) + ", not just past the door; " + action.result());
+            helper.assertTrue(action.result().startsWith("went through ") && action.result().contains("(under oak_planks at y="), action.result());
+            helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
+            assertRoomIntact(helper);
+        });
+    }
+
+    @GameTest(maxTicks = 400, skyAccess = true)
+    public void goingThroughADoorFromInsideEndsJustOutside(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction action = run(helper, body, new GoToAction("go_to(door, through)", abs(helper, DOOR.getX(), DOOR.getY(), DOOR.getZ()), true));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(at(helper, body).equals(DOOR.east()), "ended at " + at(helper, body) + ", not just past the door; " + action.result());
+            helper.assertTrue(action.result().startsWith("went through ") && action.result().contains("(under open sky)"), action.result());
+            helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
+            assertRoomIntact(helper);
+        });
+    }
+
+    @GameTest(maxTicks = 400)
     public void goingToABlockSaysHowNearTheWalkEnded(GameTestHelper helper) {
         floor(helper);
         helper.setBlock(new BlockPos(2, 1, 2), Blocks.CHEST);

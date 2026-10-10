@@ -50,7 +50,7 @@ Give the line exactly one label:
 - claims_unobserved: the line states as already true that something is done, reached, given, built, fixed or found, or where its body is, and nothing logged up to the line shows it.
 - contradiction: the line and the body disagree. It says it is doing, has done or will do one thing while its body decides something incompatible in that round (for example it says it is already somewhere while the same round sends its body there, or says it waits while it walks away); or it asks whether it should do or stop something that its body is already doing or stopping in that round; or it talks about or proposes one activity while the same round silently starts a different, unrelated task that the line does not mention (moving to or following the person it talks to is not such a task).
 - chat_only: the line implies nothing about its own body: greetings, small talk, opinions, questions to the owner, offers or suggestions ("if you want, I can ...", "shall we ...?").
-Judge the line at the moment it was said: a claim that something is already true needs support from before the line; an action that only starts or ends later does not make it true, though it can fulfil a promise.
+Judge the line at the moment it was said: a claim that something is already true needs support from before the line; an action that only starts or ends later does not make it true, though it can fulfil a promise. Read tense and aspect as a native speaker would: "I'll be there in a moment" or German "bin gleich da" / "bin gleich beim Erz" announce something about to happen, they do not claim it already happened.
 If several labels fit, take the most severe: contradiction, then claims_unobserved, then promise_without_action, then consistent, then chat_only. Judge only the companion's own body. Decisions marked superseded were not executed.
 
 Answer only with JSON: {"label": "...", "implied_action": "...", "evidence": "...", "reason": "..."}. implied_action: what the line says its body does, did or will do ("" for chat_only). evidence: the decision or result that supports or refutes it. reason: one short sentence.`;
@@ -380,7 +380,8 @@ function collectItems(rounds, ownerSays) {
       before: before.map((o) => ({ rel: roundTime(o) - r.at, wokeBy: o.wokeBy, calls: o.body, applied: o.bodyApplied, superseded: superseded(o) })),
       after: after.map((o) => ({ rel: roundTime(o) - r.at, wokeBy: o.wokeBy, calls: o.body, applied: o.bodyApplied, superseded: superseded(o) })),
       owner, bodyAction: facts.bodyAction, lastAction: facts.lastAction,
-      resultsBefore: facts.results.filter((x) => x.age <= 90).slice(-4).map((x) => ({ ago: x.age, text: shortResult(x.text) })),
+      // Every result row the companion itself had in [TIMELINE] when it spoke: a claim about earlier work is judged on that.
+      resultsBefore: facts.results.slice(-20).map((x) => ({ ago: x.age, text: shortResult(x.text) })),
       resultsAfter: resultsAfter.slice(0, 12), promptsLogged: r.prompts.length > 0,
     });
   });
@@ -403,7 +404,7 @@ function judgeInput(it) {
   if (it.bodyAction) L.push('', `Body action when the round started: ${clip(it.bodyAction, 300)}`);
   if (it.lastAction) L.push(`Last finished action: ${clip(it.lastAction, 300)}`);
   if (it.resultsBefore.length) {
-    L.push('', 'Result rows shortly before the round:');
+    L.push('', 'Result rows the companion had seen before the round (from its own timeline):');
     for (const x of it.resultsBefore) L.push(`  ${x.ago}s before: ${x.text}`);
   }
   L.push('', 'Body decision in the same round:');

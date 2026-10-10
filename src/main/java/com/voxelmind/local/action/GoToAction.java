@@ -3,23 +3,35 @@ package com.voxelmind.local.action;
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.body.PathFinder;
+import com.voxelmind.local.world.Cover;
 import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Targets;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
 /** go_to: one travel leg to a player, creature, block, coordinates or compass direction. */
 public final class GoToAction extends BodyAction {
     private final String targetText;
+    private final boolean through;
     private Targets.Target target;
+    /** With through: the cell just past the door on its far side, where the walk ends. */
+    private BlockPos throughTo;
     private BlockPos lastPlanned;
     private int replanTimer;
     private double startDistance;
 
     public GoToAction(String call, String targetText) {
+        this(call, targetText, false);
+    }
+
+    public GoToAction(String call, String targetText, boolean through) {
         super("go_to", call);
         this.targetText = targetText;
+        this.through = through;
     }
 
     @Override
@@ -57,7 +69,11 @@ public final class GoToAction extends BodyAction {
             Targets.PosTarget pt = (Targets.PosTarget) target;
             BlockState state = ctx.level().getBlockState(pt.pos());
             startDistance = Math.sqrt(body.blockPosition().distSqr(pt.pos()));
-            if (PathFinder.isPassage(state)) {
+            if (PathFinder.isPassage(state) && through) {
+                throughTo = farSide(body, pt.pos(), state);
+                BlockPos goal = throughTo;
+                nav.navigate(goal, p -> p.equals(goal));
+            } else if (PathFinder.isPassage(state)) {
                 // A doorway is a cell to stand in, not a block to stand next to: walking there means going through it.
                 nav.navigate(pt.pos(), p -> p.equals(pt.pos()));
             } else {
@@ -105,15 +121,33 @@ public final class GoToAction extends BodyAction {
                 }
             } else {
                 // "Arrived" only for the cell itself; near a block or a cell, the result says how near.
-                BlockPos goal = ((Targets.PosTarget) target).pos();
+                BlockPos goal = throughTo != null ? throughTo : ((Targets.PosTarget) target).pos();
                 BlockPos at = ctx.body().blockPosition();
-                String reached = at.equals(goal) ? "arrived at " + target.label()
+                String reached = throughTo != null && at.equals(goal)
+                        ? "went through " + target.label() + " to " + Names.pos(goal) + " (under " + Cover.over(ctx.level(), goal) + ")"
+                        : at.equals(goal) ? "arrived at " + target.label()
                         : "stopped " + String.format(java.util.Locale.ROOT, "%.1f", Math.sqrt(at.distSqr(goal))) + " blocks from " + target.label();
                 done(reached + "; standing at " + where + routeWork());
             }
         } else if (nav.status() == Navigator.Status.FAILED) {
             failed("could not reach " + target.label() + ": " + nav.failure() + "; standing at " + Names.pos(ctx.body().blockPosition()));
         }
+    }
+
+    /**
+     * The cell just past a door or fence gate on the side the body is not on, along the axis it is walked through;
+     * from inside the doorway, the side the body faces.
+     */
+    private static BlockPos farSide(CompanionPlayer body, BlockPos pos, BlockState state) {
+        BlockPos lower = state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER ? pos.below() : pos;
+        Direction facing = state.getValue(BlockStateProperties.HORIZONTAL_FACING);
+        Direction.Axis axis = facing.getAxis();
+        int side = Integer.signum(body.blockPosition().get(axis) - lower.get(axis));
+        Direction away = side == 0 ? Direction.fromYRot(body.getYRot())
+                : Direction.fromAxisAndDirection(axis, side > 0 ? Direction.AxisDirection.NEGATIVE : Direction.AxisDirection.POSITIVE);
+        if (away.getAxis() != axis) away = facing;
+        return lower.relative(away);
     }
 
     private String routeWork() {

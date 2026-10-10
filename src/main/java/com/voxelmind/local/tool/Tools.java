@@ -79,10 +79,12 @@ public final class Tools {
     static {
         action("go_to", "Walk to a target: a player name, \"owner\", an entity id like \"#57\", coordinates \"x y z\", a compass direction "
                         + "(about 24 blocks that way), or a creature or block name (the nearest one). One call is one travel leg; the result "
-                        + "reports where you arrived or why the route failed. If your owner is more than 64 blocks away you teleport next to them."
-                        + WALKS,
-                params(req("target", str("Where to go.")), null),
-                (a, call) -> new Body(new GoToAction(call, s(a, "target"))));
+                        + "reports where you arrived or why the route failed. If your owner is more than 64 blocks away you teleport next to them. "
+                        + "A door or fence gate as target: you end in its doorway; with through true you walk through it and end in the cell "
+                        + "just past it on the far side from where you stand (from inside the doorway: the side you face)." + WALKS,
+                params(req("target", str("Where to go.")),
+                        opt("through", bool("With a door or fence gate as target: true walks through it to its far side; default false."))),
+                (a, call) -> new Body(new GoToAction(call, s(a, "target"), b(a, "through"))));
         action("follow", "Stay close to a moving player or creature. Runs for about a minute, then you decide again. "
                         + "If your owner gets more than 40 blocks ahead you teleport next to them." + WALKS,
                 params(req("target", str("Player name, \"owner\" or an entity id like \"#57\".")), null),
