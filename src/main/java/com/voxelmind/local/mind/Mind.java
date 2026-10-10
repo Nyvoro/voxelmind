@@ -176,7 +176,8 @@ public final class Mind {
             logCall(wokeBy, prompt, response, null, "no tool call");
             return;
         }
-        // In the order the calls came: the first say is sent, the first other call is the body choice of this decision.
+        // In the order the calls came: the first line (a say call or a body call's say argument) is sent, the first other
+        // call is the body choice of this decision.
         List<String> applied = new ArrayList<>();
         boolean said = false;
         boolean acted = false;
@@ -194,6 +195,18 @@ public final class Mind {
             Tools.Choice choice = Tools.parse(call.name(), call.arguments());
             spoke |= choice instanceof Tools.Say;
             applied.add(apply(choice, say));
+            String line = say ? "" : Tools.sayArgument(call.name(), call.arguments());
+            if (line.isEmpty()) continue;
+            if (choice instanceof Tools.Invalid) {
+                c.event("note", "the say argument of " + call.name() + " was not sent: that call could not be executed", false, null);
+                applied.add("say argument not sent");
+            } else if (said) {
+                c.event("note", "the say argument \"" + line + "\" of " + call.name() + " was not sent: one say per decision", false, null);
+                applied.add("say argument not sent");
+            } else {
+                said = true;
+                applied.add("say (" + c.say(line, "say", "") + ")");
+            }
         }
         // A decision that only speaks is complete too, so a later technical failure gets its one retry again.
         if (spoke && !acted) invalidStreak = 0;

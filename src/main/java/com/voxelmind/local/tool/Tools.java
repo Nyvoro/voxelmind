@@ -59,6 +59,12 @@ public final class Tools {
     private static final Map<String, Spec> ACTION = new LinkedHashMap<>();
     private static final Map<String, Spec> SPEECH = new LinkedHashMap<>();
 
+    /**
+     * Every body-type tool takes this optional argument: a chat line said as the call is made. Models that return a
+     * single tool call per response (gpt-oss, Player2's free model) can so speak and act in one decision.
+     */
+    public static final String SAY_ARGUMENT = "say";
+
     static {
         action("go_to", "Walk to a target: a player name, \"owner\", an entity id like \"#57\", coordinates \"x y z\", a compass direction "
                         + "(about 24 blocks that way), or a creature or block name (the nearest one). One call is one travel leg; the result "
@@ -192,26 +198,45 @@ public final class Tools {
         JsonArray out = new JsonArray();
         for (Spec spec : ACTION.values()) {
             if (spec.name().equals("keep_current_action")) continue;
-            out.add(schema(spec));
+            out.add(schema(spec, true));
         }
-        for (Spec spec : SPEECH.values()) out.add(schema(spec));
-        if (bodyActionRunning) out.add(schema(ACTION.get("keep_current_action")));
+        for (Spec spec : SPEECH.values()) out.add(schema(spec, false));
+        if (bodyActionRunning) out.add(schema(ACTION.get("keep_current_action"), true));
         return out;
     }
 
-    private static JsonObject schema(Spec spec) {
+    private static JsonObject schema(Spec spec, boolean sayArgument) {
+        JsonObject parameters = spec.parameters();
+        if (sayArgument) {
+            parameters = parameters.deepCopy();
+            parameters.getAsJsonObject("properties").add(SAY_ARGUMENT,
+                    str("Optional: one chat line you say as you do this, heard like say in its default mode (max 256 characters)."));
+        }
         JsonObject fn = new JsonObject();
         fn.addProperty("name", spec.name());
         fn.addProperty("description", spec.description());
-        fn.add("parameters", spec.parameters());
+        fn.add("parameters", parameters);
         JsonObject tool = new JsonObject();
         tool.addProperty("type", "function");
         tool.add("function", fn);
         return tool;
     }
 
-    /** Turns one model tool call into a choice; never throws. */
+    /** The say argument of a body-type call, or "" without one; it is spoken, not part of the action. */
+    public static String sayArgument(String name, @Nullable JsonObject args) {
+        if (args == null || !ACTION.containsKey(name) || !args.has(SAY_ARGUMENT) || !args.get(SAY_ARGUMENT).isJsonPrimitive()) return "";
+        return args.get(SAY_ARGUMENT).getAsString().trim();
+    }
+
+    /**
+     * Turns one model tool call into a choice; never throws. A body-type call's say argument is taken out first, so the
+     * action and its call text stay the same whatever is said with it.
+     */
     public static Choice parse(String name, @Nullable JsonObject args) {
+        if (args != null && ACTION.containsKey(name) && args.has(SAY_ARGUMENT)) {
+            args = args.deepCopy();
+            args.remove(SAY_ARGUMENT);
+        }
         Spec spec = ACTION.containsKey(name) ? ACTION.get(name) : SPEECH.get(name);
         String call = callText(name, args);
         if (spec == null) return new Invalid(call, "unknown tool '" + name + "' for this decision");

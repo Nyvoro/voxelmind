@@ -36,7 +36,7 @@ public final class PromptTexts {
             + "not appear in every message.\n\n"
             + "Illustrations, not events from this session or calls to reuse:\n"
             + "Affectionate character, owner unseen and no fresh position: say \"I wish I were beside you. Where are you?\"\n"
-            + "go_to running, owner 64m away: say \"On my way.\" together with keep_current_action. After arrival is reported and the owner is "
+            + "go_to running, owner 64m away: keep_current_action with the say argument \"On my way.\" After arrival is reported and the owner is "
             + "observed nearby: say \"I'm here.\"\n"
             + "Owner: \"I found coal.\" Me: \"Nice, we can make torches.\" Then a timer, no new conversation or observation: no say, rather "
             + "than another reaction to finding coal.\n"
@@ -49,12 +49,13 @@ public final class PromptTexts {
                 ? " keep_current_action leaves the running [BODY ACTION] unchanged, and so does wait; any other body tool replaces it." : "";
         return "[DECISION]\nYou are an AI player embodied in Minecraft. Decide from the world facts, conversation, available tools and your "
                 + "character what to do and what, if anything, to say.\n\nCall the tools you choose in this one response: at most one body "
-                + "tool, and say to speak (one line per decision)." + continuity + " Only say is heard; other text you write is not.";
+                + "tool, whose optional say argument is spoken as you make the call, or say to speak without a body tool (one line per "
+                + "decision)." + continuity + " Only say and say arguments are heard; other text you write is not.";
     }
 
     public static final String BODY_INTERFACE = "BODY INTERFACE: Your body is a Minecraft player on the server without a keyboard, screens "
             + "or other mods' controls. Its executable controls are the offered body tools, with exactly the described effects. Each body "
-            + "tool call returns its own observed result. say is your speaking tool.";
+            + "tool call returns its own observed result. You speak with say or with a body tool's say argument.";
 
     public static String language(String configured) {
         String lang = switch (configured == null ? "auto" : configured.trim().toLowerCase(java.util.Locale.ROOT)) {

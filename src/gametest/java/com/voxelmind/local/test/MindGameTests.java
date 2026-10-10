@@ -473,6 +473,56 @@ public class MindGameTests {
         });
     }
 
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aBodyCallSpeaksItsSayArgument(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        String goal = abs(helper, 6, 1, 6);
+        // One tool call that speaks and acts, as single-call models (gpt-oss) answer.
+        Companion c = summon(helper, owner, completion(call("go_to", "target", goal, "say", "Coming to the corner!")));
+        c.hear(owner.getGameProfile().name(), true, "Come to the corner, please.", "public");
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(sent(c, "Coming to the corner!") != null, "the say argument was spoken");
+            helper.assertTrue(started(c, "go_to"), "the body action started");
+            helper.assertTrue(requests(c) == 1, "one request, got " + requests(c));
+            String applied = JsonParser.parseString(decisionLog(c).getFirst()).getAsJsonObject().get("applied").getAsString();
+            helper.assertTrue(applied.startsWith("started go_to(target=\"" + goal + "\") + say (heard by "), "the call text leaves the line out: " + applied);
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void onlyTheFirstLineOfADecisionIsSaid(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        String goal = abs(helper, 6, 1, 6);
+        Companion c = summon(helper, owner, completion(call("say", "text", "First line."), call("go_to", "target", goal, "say", "Second line.")));
+        c.hear(owner.getGameProfile().name(), true, "Come here and tell me something.", "public");
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(sent(c, "First line.") != null, "the say call was sent");
+            helper.assertTrue(sent(c, "Second line.") == null, "the say argument after it was not sent");
+            helper.assertTrue(noted(c, "Second line.", "was not sent: one say per decision"), "the second line is a note");
+            helper.assertTrue(started(c, "go_to"), "the body call still ran");
+            helper.assertTrue(requests(c) == 1, "one request, got " + requests(c));
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void anInvalidBodyCallKeepsItsLine(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        // dig without its required direction cannot be executed; its line goes with it.
+        Companion c = summon(helper, owner, completion(call("dig", "say", "Digging now!")));
+        c.hear(owner.getGameProfile().name(), true, "Dig, please.", "public");
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(sent(c, "Digging now!") == null, "the line of the failed call was not sent");
+            helper.assertTrue(noted(c, "say argument of dig", "could not be executed"), "the note says why");
+            helper.assertFalse(started(c, "dig"), "dig did not run");
+        });
+    }
+
     // ---- conversation window ----
 
     private static Timeline.Event at(Timeline.Event e, long epochMs) {
