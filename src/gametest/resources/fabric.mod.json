@@ -8,6 +8,7 @@
     "fabric-gametest": [
       "com.voxelmind.local.test.BodyGameTests",
       "com.voxelmind.local.test.SettingsGameTests",
+      "com.voxelmind.local.test.PlacedGameTests",
       "com.voxelmind.local.hosted.HostedGameTests"
     ],
     "fabric-client-gametest": [

@@ -4,6 +4,7 @@
   "package": "com.voxelmind.local.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "BlockItemMixin",
     "PlayerListRespawnMixin",
     "SleepStatusMixin"
   ],

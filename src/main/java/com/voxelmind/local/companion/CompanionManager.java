@@ -163,6 +163,7 @@ public final class CompanionManager {
         } catch (IOException e) {
             VoxelMindLocal.LOG.error("Could not save companions to {}", dir, e);
         }
+        com.voxelmind.local.world.Placed.save(server);
     }
 
     // ---- lifecycle ----

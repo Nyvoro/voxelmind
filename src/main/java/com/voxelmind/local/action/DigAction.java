@@ -5,12 +5,14 @@ import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.body.PathFinder;
 import com.voxelmind.local.world.Inv;
 import com.voxelmind.local.world.Names;
+import com.voxelmind.local.world.Placed;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.item.Item;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -28,6 +30,9 @@ public final class DigAction extends BodyAction {
     private BlockPos walkTarget;
     private Map<Item, Integer> before;
     private int blocksBroken;
+    private int placedBroken;
+    private final Map<String, Integer> placedBy = new HashMap<>();
+    private final Map<String, Integer> placedTypes = new HashMap<>();
 
     public DigAction(String call, String direction, int distance) {
         super("dig", call);
@@ -66,11 +71,16 @@ public final class DigAction extends BodyAction {
         if (breaker != null) {
             BlockBreaker.State s = breaker.tick();
             if (s == BlockBreaker.State.DONE || s == BlockBreaker.State.FAILED) {
+                blocksBroken += breaker.broken();
+                for (BlockBreaker.PlacedBlock p : breaker.brokePlaced()) {
+                    placedBroken++;
+                    placedBy.merge(p.placer(), 1, Integer::sum);
+                    placedTypes.merge(p.block(), 1, Integer::sum);
+                }
                 if (s == BlockBreaker.State.FAILED && !level.getBlockState(breaker.target()).isAir()) {
                     finish(ctx, "stopped: " + breaker.failure());
                     return;
                 }
-                blocksBroken++;
                 breaker = null;
             }
             return;
@@ -154,6 +164,10 @@ public final class DigAction extends BodyAction {
         String gained = Inv.describe(Inv.gained(before, Inv.snapshot(body)));
         String text = "dug " + (forward == Direction.DOWN ? "down " : forward.getName() + " ") + moved + " of " + target()
                 + " blocks, broke " + blocksBroken + " blocks, now at " + Names.pos(body.blockPosition()) + "; inventory gained " + gained;
+        if (placedBroken > 0) {
+            text += "; " + placedBroken + " of the broken blocks were placed (" + Placed.list(placedBy, " ", 4) + "): "
+                    + Placed.list(placedTypes, " ×", 6);
+        }
         if (stopReason == null) done(text);
         else if (moved > 0) done(text + "; " + stopReason);
         else failed(text + "; " + stopReason);
