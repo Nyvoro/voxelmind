@@ -562,6 +562,9 @@ public class MindGameTests {
             helper.assertFalse(tools(c, 1).contains("keep_current_action"), "nothing ran at the first decision: " + tools(c, 1));
             helper.assertTrue(tools(c, 2).contains("keep_current_action"), "a running wait can be kept: " + tools(c, 2));
             helper.assertTrue(prompt(c, 2).contains("keep_current_action changes nothing"), "the decision text says what keeping does");
+            helper.assertTrue(prompt(c, 1).contains("say alone leaves your body idle until your next decision"),
+                    "with nothing running, the decision text says what say alone does");
+            helper.assertFalse(prompt(c, 2).contains("say alone leaves your body idle"), "with a wait running, it does not");
             List<String> log = decisionLog(c);
             helper.assertTrue(log.size() == 2 && log.get(1).contains("\"applied\":\"keep_current_action\""), "kept: " + log);
             boolean ended = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("result") && e.text.startsWith("wait("));

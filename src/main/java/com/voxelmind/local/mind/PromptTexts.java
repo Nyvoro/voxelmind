@@ -48,7 +48,9 @@ public final class PromptTexts {
     public static String decision(boolean keepable) {
         String continuity = keepable
                 ? " keep_current_action changes nothing: a running [BODY ACTION] and a running WAIT continue, and say alone leaves them "
-                + "running too; wait starts a new wait and keeps the [BODY ACTION]; stop and every other body tool end both." : "";
+                + "running too; wait starts a new wait and keeps the [BODY ACTION]; stop and every other body tool end both."
+                : " Nothing runs now, so say alone leaves your body idle until your next decision, which comes when someone speaks, "
+                + "something happens to you or a quiet moment comes.";
         return "[DECISION]\nYou are an AI player embodied in Minecraft. Decide from the world facts, conversation, available tools and your "
                 + "character what to do and what, if anything, to say.\n\nCall the tools you choose in this one response: at most one body "
                 + "tool, whose optional say argument is sent the moment the call starts, before its result, or say to speak without a body tool (one line per "
