@@ -285,7 +285,7 @@ function buildRounds(entries) {
 const UNIT = { s: 1, m: 60, h: 3600, d: 86400 };
 
 function promptFacts(prompt) {
-  const out = { bodyAction: '', lastAction: '', pos: '', chats: [], results: [], remembered: [] };
+  const out = { bodyAction: '', lastAction: '', pos: '', chats: [], results: [], seen: [], remembered: [] };
   if (!prompt) return out;
   for (const l of prompt.split('\n')) {
     if (l.startsWith('BODY ACTION: ')) out.bodyAction = l.slice(13);
@@ -310,8 +310,16 @@ function promptFacts(prompt) {
     const m = /^\d+\. \((\d+)([smhd]) ago\) (.*)$/.exec(l);
     if (!m) continue;
     const row = { age: Number(m[1]) * UNIT[m[2]], exact: m[2] === 's', text: m[3] };
-    if (/^[✓✗⊘•] /.test(row.text)) out.results.push(row);
-    else if (!row.text.startsWith('me: ') && !row.text.startsWith('your plain text') && /^[^"]{1,80}: "/.test(row.text)) out.chats.push(row);
+    const own = row.text.startsWith('me: ') || row.text.startsWith('your plain text');
+    if (/^[✓✗⊘•] /.test(row.text)) {
+      out.results.push(row);
+      out.seen.push(row);
+    } else if (!own && /^[^"]{1,80}: "/.test(row.text)) {
+      out.chats.push(row);
+    } else if (!own) {
+      // What else happened to it (damage, death, respawn, a world change) is evidence too.
+      out.seen.push(row);
+    }
   }
   return out;
 }
@@ -393,8 +401,8 @@ function collectItems(rounds, ownerSays) {
       before: before.map((o) => ({ rel: roundTime(o) - r.at, wokeBy: o.wokeBy, calls: o.body, applied: o.bodyApplied, superseded: superseded(o) })),
       after: after.map((o) => ({ rel: roundTime(o) - r.at, wokeBy: o.wokeBy, calls: o.body, applied: o.bodyApplied, superseded: superseded(o) })),
       owner, bodyAction: facts.bodyAction, lastAction: facts.lastAction,
-      // Every result row the companion itself had in [TIMELINE] when it spoke: a claim about earlier work is judged on that.
-      resultsBefore: facts.results.slice(-20).map((x) => ({ ago: x.age, text: shortResult(x.text) })),
+      // Every result and event row the companion itself had in [TIMELINE] when it spoke: a claim about earlier work is judged on that.
+      resultsBefore: facts.seen.slice(-30).map((x) => ({ ago: x.age, text: shortResult(x.text) })),
       remembered: facts.remembered.slice(-30).map((x) => ({ ago: x.at == null ? null : Math.round((r.launch - x.at) / 1000), text: clip(x.text, 240) })),
       pos: facts.pos,
       resultsAfter: resultsAfter.slice(0, 12), promptsLogged: r.prompts.length > 0,
@@ -424,7 +432,7 @@ function judgeInput(it) {
     for (const x of it.remembered) L.push(`  ${x.ago == null ? 'earlier' : `${x.ago}s before`}: ${x.text}`);
   }
   if (it.resultsBefore.length) {
-    L.push('', 'Result rows the companion had seen before the round (from its own timeline):');
+    L.push('', 'Result and event rows the companion had seen before the round (from its own timeline):');
     for (const x of it.resultsBefore) L.push(`  ${x.ago}s before: ${x.text}`);
   }
   L.push('', 'Body decision in the same round:');
