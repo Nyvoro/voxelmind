@@ -586,6 +586,28 @@ public class PlacedGameTests {
         });
     }
 
+    @GameTest(maxTicks = 300)
+    public void miningNeverBreaksABlockInTheWayThatLavaTouches(GameTestHelper helper) {
+        floor(helper);
+        // Stone in the way to the target, with lava sealed in above it.
+        for (int y = 1; y <= 2; y++) natural(helper, new BlockPos(3, y, 3), Blocks.STONE.defaultBlockState());
+        for (BlockPos seal : new BlockPos[]{new BlockPos(2, 3, 3), new BlockPos(4, 3, 3), new BlockPos(3, 3, 2), new BlockPos(3, 3, 4), new BlockPos(3, 4, 3)}) {
+            natural(helper, seal, Blocks.STONE.defaultBlockState());
+        }
+        helper.setBlock(new BlockPos(3, 3, 3), Blocks.LAVA);
+        natural(helper, new BlockPos(4, 1, 3), Blocks.STONE.defaultBlockState());
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 3));
+        body.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        BodyAction action = run(helper, body, new MineBlockAction("mine_block(stone)", abs(helper, 4, 1, 3)));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(action.finished() && action.outcome() == BodyAction.Outcome.FAILED, "mine_block: " + action.outcome() + ": " + action.result());
+            helper.assertTrue(action.result().startsWith("stone at ") && action.result().contains(" and lava touches it;"), action.result());
+            for (int y = 1; y <= 2; y++) helper.assertBlockPresent(Blocks.STONE, new BlockPos(3, y, 3));
+            helper.assertBlockPresent(Blocks.LAVA, new BlockPos(3, 3, 3));
+            helper.assertBlockPresent(Blocks.STONE, new BlockPos(4, 1, 3));
+        });
+    }
+
     @GameTest(maxTicks = 1200, skyAccess = true)
     public void gatherTakesAPlantedFieldOnlyWithIncludePlaced(GameTestHelper helper) {
         // A crop counts its produce: gathering wheat counts wheat, not the seeds the wheat block stands for as an item.

@@ -25,6 +25,7 @@ import net.minecraft.world.level.block.DragonEggBlock;
 import net.minecraft.world.level.block.NoteBlock;
 import net.minecraft.world.level.block.RespawnAnchorBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -69,6 +70,19 @@ public final class Hands {
             if (!level.getFluidState(n).isEmpty()) return false;
         }
         return level.getFluidState(pos).isEmpty();
+    }
+
+    /**
+     * The fluid that would flow once {@code pos} is broken: "lava" or "water" in it or touching it from above or a side
+     * (the cells {@link #dryToBreak} looks at), null when there is none.
+     */
+    public static @Nullable String fluidAt(ServerLevel level, BlockPos pos) {
+        for (Direction d : new Direction[]{null, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
+            FluidState fluid = level.getFluidState(d == null ? pos : pos.relative(d));
+            if (fluid.isEmpty()) continue;
+            return fluid.is(FluidTags.LAVA) ? "lava" : fluid.is(FluidTags.WATER) ? "water" : "a fluid";
+        }
+        return null;
     }
 
     /** Estimated ticks to break with the best carried tool; Float.MAX_VALUE when impossible. */

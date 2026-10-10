@@ -158,14 +158,16 @@ final class BlockBreaker {
             BlockPos obstruction = obstruction(body, target);
             // The other half of a door, bed or tall plant that is the target goes with the target itself.
             if (obstruction != null && !obstruction.equals(Placed.partner(level.getBlockState(target), target))) {
-                // Only the target is broken whatever it is (it was chosen); in its way only what no player placed and no
-                // door, gate or trapdoor.
+                // Only the target is broken whatever it is (it was chosen); in its way only what no player placed, what no
+                // water or lava would flow out of or past, as walking digs, and no door, gate or trapdoor.
                 BlockState in = level.getBlockState(obstruction);
                 String placer = Placed.placer(level, obstruction);
-                if (placer != null || opens(in)) {
+                String fluid = Hands.fluidAt(level, obstruction);
+                if (placer != null || opens(in) || fluid != null) {
                     fail(Names.id(in.getBlock()) + " at " + Names.pos(obstruction) + (placer == null ? "" : ", placed by " + placer + ",")
-                            + " is in the way to " + targetName + " at " + Names.pos(target) + "; blocks in the way are mined only when no "
-                            + "player placed them and they are no door, gate or trapdoor");
+                            + " is in the way to " + targetName + " at " + Names.pos(target) + (fluid == null ? "" : " and " + fluid + " touches it")
+                            + "; blocks in the way are mined only when no player placed them, no water or lava touches them and they "
+                            + "are no door, gate or trapdoor");
                     return;
                 }
                 if (brokeInWay.size() >= MAX_OBSTRUCTIONS) {
