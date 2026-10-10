@@ -128,7 +128,7 @@ public final class Companion implements CompanionPlayer.BodyListener {
         Compat.acceptPlayerLoad(newBody);
         event("respawn", "you respawned at " + Names.pos(newBody.blockPosition()) + " in "
                 + newBody.level().dimension().identifier().getPath() + " with HP " + Math.round(newBody.getHealth()), false, null);
-        mind.wake("respawned", true, true, 500);
+        mind.wake("respawned", 500);
     }
 
     // ---- body actions ----
@@ -162,8 +162,7 @@ public final class Companion implements CompanionPlayer.BodyListener {
         current = null;
         last = new LastAction(a.tool(), a.call(), a.outcome().id, a.result(), System.currentTimeMillis());
         event("result", a.call() + ": " + a.result(), false, a.outcome().id);
-        boolean longRunning = a.ticksRunning() >= 20 * 10;
-        if (wake) mind.wake("result of " + a.tool() + " (" + a.outcome().id + ")", true, longRunning, 400);
+        if (wake) mind.wake("result of " + a.tool() + " (" + a.outcome().id + ")", 400);
     }
 
     /** True when exactly this call is the body action running now. */
@@ -213,7 +212,7 @@ public final class Companion implements CompanionPlayer.BodyListener {
         event(channel.equals("whisper") ? "whisper_in" : "chat_in", who + ": \"" + text + "\"", fromOwner, null);
         boolean mentioned = text.toLowerCase().contains(state.name.toLowerCase());
         if (fromOwner || channel.equals("whisper") || mentioned) {
-            mind.wake("chat from " + speaker, true, true, 300);
+            mind.wake("chat from " + speaker, 300);
         }
     }
 
@@ -273,7 +272,7 @@ public final class Companion implements CompanionPlayer.BodyListener {
         String from = attacker != null ? Names.entity(attacker) + " [#" + attacker.getId() + "]" : source.getMsgId();
         event("damage", "took " + String.format("%.1f", healthLost) + " damage from " + from + "; HP now " + Math.round(body.getHealth()) + "/20", false, null);
         boolean fighting = current != null && !current.finished() && current.tool().equals("attack");
-        if (!fighting) mind.wake("hurt by " + from, true, false, 150);
+        if (!fighting) mind.wake("hurt by " + from, 150);
     }
 
     @Override

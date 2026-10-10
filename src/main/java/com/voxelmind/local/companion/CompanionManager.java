@@ -266,7 +266,7 @@ public final class CompanionManager {
             if (spot != null) {
                 Compat.teleport(body, Compat.level(owner), spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, body.getYRot());
                 c.event("presence", "your owner called you; you appeared next to them at (" + spot.getX() + "," + spot.getY() + "," + spot.getZ() + ")", false, null);
-                c.mind.wake("summoned by your owner", true, true, 300);
+                c.mind.wake("summoned by your owner", 300);
                 return name + " is here.";
             }
             return "There is no free spot next to you for " + name + ".";
@@ -308,7 +308,7 @@ public final class CompanionManager {
         }
         c.state.lastWorld = world;
         c.event("presence", "you entered the world next to your owner at (" + spot.getX() + "," + spot.getY() + "," + spot.getZ() + ")", false, null);
-        c.mind.wake("you just arrived in the world", true, true, 1500);
+        c.mind.wake("you just arrived in the world", 1500);
         return null;
     }
 
