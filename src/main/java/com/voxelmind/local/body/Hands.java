@@ -10,19 +10,23 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
 
-/** What a player's hands do: break a block in reach, place a carried block, look at things. */
+/** What a player's hands do: break a block in reach, place a carried block, use a block, look at things. */
 public final class Hands {
     private Hands() {}
 
@@ -204,6 +208,57 @@ public final class Hands {
         body.gameMode.useItemOn(body, level, body.getMainHandItem(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, face, support, false));
         body.swing(InteractionHand.MAIN_HAND);
         return level.getBlockState(target) != before;
+    }
+
+    /**
+     * Right-click on a block in reach with the main hand, the way a player's use key does: the body looks at the hit
+     * point and the game's own item-on-block use runs, in which doors, levers and other blocks react before the held
+     * item does.
+     */
+    public static InteractionResult use(CompanionPlayer body, ServerLevel level, BlockHitResult hit) {
+        turnTo(body, hit.getLocation());
+        InteractionResult result = body.gameMode.useItemOn(body, level, body.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
+        if (result.consumesAction()) body.swing(InteractionHand.MAIN_HAND);
+        return result;
+    }
+
+    /** Where a player looking at {@code pos} from the body's eyes clicks it: the middle of its outline, on the side facing the eyes. */
+    public static BlockHitResult aim(CompanionPlayer body, BlockGetter level, BlockPos pos) {
+        Vec3 eye = body.getEyePosition();
+        Vec3 point = aimPoint(level, pos);
+        BlockHitResult hit = level.getBlockState(pos).getShape(level, pos).clip(eye, point, pos);
+        if (hit != null) return hit;
+        Vec3 d = eye.subtract(point);
+        Direction face = Math.abs(d.y) > Math.max(Math.abs(d.x), Math.abs(d.z)) ? (d.y > 0 ? Direction.UP : Direction.DOWN)
+                : Math.abs(d.x) > Math.abs(d.z) ? (d.x > 0 ? Direction.EAST : Direction.WEST) : (d.z > 0 ? Direction.SOUTH : Direction.NORTH);
+        return new BlockHitResult(point, face, pos, false);
+    }
+
+    /** The middle of a block's outline: a door's panel, a lever, a button; the centre for a full block. */
+    public static Vec3 aimPoint(BlockGetter level, BlockPos pos) {
+        VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
+        return shape.isEmpty() ? Vec3.atCenterOf(pos) : shape.bounds().getCenter().add(pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    /** Within a player's block interaction range of the body's eyes. */
+    public static boolean inReach(CompanionPlayer body, BlockPos pos) {
+        double range = body.blockInteractionRange();
+        return new AABB(pos).distanceToSqr(body.getEyePosition()) <= range * range;
+    }
+
+    /** Turns head and body to {@code point} at once, as a player flicks the mouse before a click. */
+    private static void turnTo(CompanionPlayer body, Vec3 point) {
+        Vec3 eye = body.getEyePosition();
+        double dx = point.x - eye.x;
+        double dy = point.y - eye.y;
+        double dz = point.z - eye.z;
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        if (horizontal > 0.3) {
+            float yaw = (float) (Mth.atan2(dz, dx) * (180.0 / Math.PI)) - 90.0f;
+            body.setYRot(yaw);
+            body.setYHeadRot(yaw);
+        }
+        body.setXRot((float) -(Mth.atan2(dy, horizontal) * (180.0 / Math.PI)));
     }
 
     /** The scaffold item the body would build with, or null. */
