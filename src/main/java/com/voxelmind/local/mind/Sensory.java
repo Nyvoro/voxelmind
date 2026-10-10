@@ -4,6 +4,7 @@ import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.compat.Compat;
 import com.voxelmind.local.world.Inv;
 import com.voxelmind.local.world.Names;
+import com.voxelmind.local.world.Placed;
 import com.voxelmind.local.world.Resources;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -17,6 +18,9 @@ import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -33,6 +37,8 @@ import java.util.UUID;
 public final class Sensory {
     private static final int SCAN_H = 20;
     private static final int SCAN_V = 10;
+    /** Placed blocks are counted in the cube of this radius around the feet. */
+    private static final int PLACED_RADIUS = 8;
     private static final Set<String> FEATURES = Set.of("crafting_table", "furnace", "blast_furnace", "smoker", "chest", "barrel",
             "enchanting_table", "anvil", "smithing_table", "composter", "trapped_chest");
     private static final Set<String> GROUND = Set.of("sand", "gravel", "clay", "sugar_cane", "pumpkin", "melon", "sweet_berry_bush",
@@ -44,6 +50,7 @@ public final class Sensory {
         int count;
         BlockPos closest;
         double dist = Double.MAX_VALUE;
+        BlockState closestState;
     }
 
     public static String render(CompanionPlayer body, UUID ownerId, String ownerName, String wokeBy, String bodyAction) {
@@ -71,9 +78,15 @@ public final class Sensory {
         out.append("Time: ").append(timeText(level)).append("; weather ")
                 .append(level.isThundering() ? "thunderstorm" : level.isRaining() ? "rain" : "clear").append('\n');
         out.append(groundLine(level, feet));
-        out.append("Standing on ").append(Names.id(level.getBlockState(feet.below()).getBlock()))
+        out.append(aboveLine(level, feet));
+        out.append("Standing on ").append(Names.id(level.getBlockState(feet.below()).getBlock())).append(placedNote(level, feet.below()))
                 .append("; block in front: ").append(Names.id(level.getBlockState(feet.relative(Direction.fromYRot(body.getYRot()))).getBlock()))
                 .append('\n');
+        Placed.Summary placed = Placed.summary(level, feet, PLACED_RADIUS);
+        if (placed.total() > 0) {
+            out.append("Placed blocks within ").append(PLACED_RADIUS).append(": ").append(placed.total())
+                    .append(" (").append(Placed.list(placed.byPlacer(), " ", 4)).append("): ").append(Placed.list(placed.byBlock(), " ×", 4)).append('\n');
+        }
 
         out.append("In hand: ").append(body.getMainHandItem().isEmpty() ? "nothing" : Names.stack(body.getMainHandItem()))
                 .append("; off hand: ").append(body.getOffhandItem().isEmpty() ? "nothing" : Names.stack(body.getOffhandItem()))
@@ -195,6 +208,12 @@ public final class Sensory {
                     else if (FEATURES.contains(id) || state.is(BlockTags.BEDS)) {
                         key = state.is(BlockTags.BEDS) ? "bed" : id;
                         feature = true;
+                    } else if (opens(state)) {
+                        // A door is counted once, at its lower half.
+                        if (state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                                && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) continue;
+                        key = id;
+                        feature = true;
                     } else if (GROUND.contains(id) || state.is(BlockTags.CROPS)) key = id;
                     else if (state.getFluidState().is(FluidTags.LAVA) && state.getFluidState().isSource()) key = "lava";
                     else if (state.getFluidState().is(FluidTags.WATER) && state.getFluidState().isSource()) key = "water";
@@ -207,6 +226,7 @@ public final class Sensory {
                     if (d < agg.dist) {
                         agg.dist = d;
                         agg.closest = cursor.immutable();
+                        agg.closestState = state;
                     }
                 }
             }
@@ -226,9 +246,18 @@ public final class Sensory {
                 if (n++ > 0) out.append("; ");
                 out.append(e.getKey()).append(e.getValue().count > 1 ? " ×" + e.getValue().count : "").append(" at ")
                         .append(Names.pos(e.getValue().closest)).append(' ').append(Math.round(e.getValue().dist)).append('m');
+                BlockState closest = e.getValue().closestState;
+                if (opens(closest) && closest.hasProperty(BlockStateProperties.OPEN)) {
+                    out.append(closest.getValue(BlockStateProperties.OPEN) ? ", open" : ", closed");
+                }
             }
             out.append('\n');
         }
+    }
+
+    /** Doors, fence gates and trapdoors: features with an open or closed state. */
+    private static boolean opens(BlockState state) {
+        return state.is(BlockTags.DOORS) || state.is(BlockTags.FENCE_GATES) || state.is(BlockTags.TRAPDOORS);
     }
 
     /** How even the ground is nearby, from the surface heights within 6 blocks. */
@@ -241,7 +270,7 @@ public final class Sensory {
                 int x = feet.getX() + dx;
                 int z = feet.getZ() + dz;
                 if (!level.isLoaded(new BlockPos(x, feet.getY(), z))) continue;
-                int top = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
+                int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
                 if (level.getFluidState(new BlockPos(x, top, z)).is(FluidTags.WATER)) {
                     water = true;
                     continue;
@@ -251,10 +280,35 @@ public final class Sensory {
             }
         }
         if (min == Integer.MAX_VALUE) return "";
-        int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, feet.getX(), feet.getZ()) - 1;
-        String where = feet.getY() - 1 < surface - 1 ? " (you are below the surface, which is at y=" + surface + " here)" : "";
         return "Ground within 6 blocks: top blocks from y=" + min + " to y=" + max + (max - min <= 1 ? " (flat)" : max - min <= 3 ? " (uneven)" : " (hilly)")
-                + (water ? ", some water" : "") + where + "; survey gives the exact grid.\n";
+                + (water ? ", some water" : "") + "; survey gives the exact grid.\n";
+    }
+
+    /** The column over the head, literally: the first block above it and the highest block of the column. */
+    private static String aboveLine(ServerLevel level, BlockPos feet) {
+        int head = feet.getY() + 1;
+        int top = level.getHeight(Heightmap.Types.WORLD_SURFACE, feet.getX(), feet.getZ()) - 1;
+        if (top <= head) return "Above you: open sky.\n";
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos(feet.getX(), head + 1, feet.getZ());
+        while (cursor.getY() < top && level.getBlockState(cursor).isAir()) cursor.move(Direction.UP);
+        BlockPos first = cursor.immutable();
+        String placer = Placed.placer(level, first);
+        StringBuilder line = new StringBuilder("Above you: ").append(Names.id(level.getBlockState(first).getBlock())).append(" at y=").append(first.getY())
+                .append(" (").append(first.getY() - head).append(" up").append(placer == null ? "" : ", placed by " + placer).append(')');
+        if (first.getY() == top) {
+            line.append("; the highest block in this column is at y=").append(top);
+        } else {
+            BlockPos highest = new BlockPos(feet.getX(), top, feet.getZ());
+            line.append("; the highest block in this column is ").append(Names.id(level.getBlockState(highest).getBlock())).append(" at y=").append(top)
+                    .append(placedNote(level, highest));
+        }
+        return line.append(".\n").toString();
+    }
+
+    /** " (placed by NAME)" when a player placed the block at {@code pos}. */
+    private static String placedNote(ServerLevel level, BlockPos pos) {
+        String placer = Placed.placer(level, pos);
+        return placer == null ? "" : " (placed by " + placer + ")";
     }
 
     private static String timeText(ServerLevel level) {

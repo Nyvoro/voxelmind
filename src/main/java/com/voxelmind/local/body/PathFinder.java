@@ -190,7 +190,8 @@ public final class PathFinder {
         if (!mode.dig() || mode.body() == null || !(level instanceof ServerLevel server)) return BLOCKED;
         if (mode.protect() != null && mode.protect().test(cell)) return BLOCKED;
         BlockState state = level.getBlockState(cell);
-        if (!Hands.isNaturalTerrain(state) || !Hands.dryToBreak(server, cell)) return BLOCKED;
+        // Natural terrain only: never a block a player placed, whatever its type.
+        if (!Hands.isNaturalTerrain(state) || !Hands.dryToBreak(server, cell) || com.voxelmind.local.world.Placed.isPlaced(server, cell)) return BLOCKED;
         float ticks = Hands.breakTicks(mode.body(), server, cell, state);
         if (ticks == Float.MAX_VALUE || ticks > 400) return BLOCKED;
         return 1.0 + ticks / 10.0;

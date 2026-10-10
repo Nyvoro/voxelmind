@@ -187,7 +187,8 @@ public final class Navigator {
         // Clear the cells this step passes through.
         for (BlockPos cell : cellsToClear(prev, node)) {
             if (PathFinder.passable(level, cell)) continue;
-            if (!Hands.isNaturalTerrain(level.getBlockState(cell)) || !Hands.dryToBreak(level, cell) || (protect != null && protect.test(cell))) {
+            if (!Hands.isNaturalTerrain(level.getBlockState(cell)) || !Hands.dryToBreak(level, cell) || (protect != null && protect.test(cell))
+                    || com.voxelmind.local.world.Placed.isPlaced(level, cell)) {
                 if (++replans > MAX_REPLANS) return fail(level.getBlockState(cell).getBlock().getName().getString() + " blocks the way at " + fmt(cell));
                 return plan();
             }

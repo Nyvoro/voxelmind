@@ -3,11 +3,13 @@ package com.voxelmind.local;
 import com.voxelmind.local.command.VmlCommand;
 import com.voxelmind.local.companion.CompanionManager;
 import com.voxelmind.local.config.LocalConfig;
+import com.voxelmind.local.world.Placed;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import org.slf4j.Logger;
@@ -28,8 +30,11 @@ public final class VoxelMindLocal implements ModInitializer {
         com.voxelmind.local.net.Speech.register();
         com.voxelmind.local.hosted.HostedEvents.register();
         CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> VmlCommand.register(dispatcher));
+        ServerLifecycleEvents.SERVER_STARTING.register(Placed::start);
         ServerLifecycleEvents.SERVER_STARTED.register(CompanionManager::start);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> CompanionManager.stop());
+        ServerLifecycleEvents.SERVER_STOPPED.register(Placed::stop);
+        PlayerBlockBreakEvents.AFTER.register((level, player, pos, state, blockEntity) -> Placed.onBreak(level, pos, state));
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             CompanionManager m = CompanionManager.get();
             if (m != null) m.tick();
