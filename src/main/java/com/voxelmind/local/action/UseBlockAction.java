@@ -12,6 +12,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.BlockHitResult;
@@ -30,6 +31,8 @@ public final class UseBlockAction extends BodyAction {
     private static final int MAX_APPROACHES = 3;
 
     private final BlockPos target;
+    /** The block's name when the action started, for the walk; the use itself reads the block again. */
+    private String name = "";
     private boolean walking;
     private int approaches;
     private int aimTicks;
@@ -41,20 +44,22 @@ public final class UseBlockAction extends BodyAction {
 
     @Override
     protected void onStart(ActionContext ctx) {
-        if (ctx.level().getBlockState(target).isAir()) failed("there is no block at " + Names.pos(target) + " (air)");
+        BlockState state = ctx.level().getBlockState(target);
+        name = Names.id(state.getBlock());
+        if (state.isAir()) {
+            failed("there is no block at " + Names.pos(target) + " (air)");
+            return;
+        }
+        // A door the body left open while walking is used on purpose now: walking no longer closes it before the click.
+        Navigator.forget(ctx.body(), ctx.level(), target);
     }
 
     @Override
     protected void onTick(ActionContext ctx) {
         CompanionPlayer body = ctx.body();
         ServerLevel level = ctx.level();
-        BlockState before = level.getBlockState(target);
-        String name = Names.id(before.getBlock());
-        if (before.isAir()) {
-            failed("the block at " + Names.pos(target) + " is gone (air)");
-            return;
-        }
         // Once walking, the walk ends where the route ends: never halfway through a doorway, whose door then stays open.
+        // The block is read once the walk is over, so a block far away does not load its chunk on every step.
         if (walking) {
             Navigator.Status s = nav.tick();
             if (s == Navigator.Status.FAILED) {
@@ -63,6 +68,12 @@ public final class UseBlockAction extends BodyAction {
             }
             if (s == Navigator.Status.MOVING) return;
             walking = false;
+        }
+        BlockState before = level.getBlockState(target);
+        name = Names.id(before.getBlock());
+        if (before.isAir()) {
+            failed("the block at " + Names.pos(target) + " is gone (air)");
+            return;
         }
         if (!inPosition(level, body, nav.feet(), BlockBreaker.REACH)) {
             if (++approaches > MAX_APPROACHES) {
@@ -96,6 +107,13 @@ public final class UseBlockAction extends BodyAction {
             body.closeContainer();
             failed(used + "it opened a screen, which was closed again at once; use_chest, craft and smelt work with chests, "
                     + "crafting tables and furnaces");
+            return;
+        }
+        // The sign editor is the client's screen; on the server it only reserves the sign for this body, which blocks
+        // everyone else from editing it while the body stays close.
+        if (level.getBlockEntity(target) instanceof SignBlockEntity sign && body.getUUID().equals(sign.getPlayerWhoMayEdit())) {
+            sign.setAllowedPlayerEditor(null);
+            failed(used + "it opened the sign's text editor, which was closed again at once; you cannot write on signs");
             return;
         }
         if (!sleepingBefore && body.isSleeping()) {
@@ -151,6 +169,6 @@ public final class UseBlockAction extends BodyAction {
     @Override
     public String progress() {
         if (ctx == null) return "";
-        return (walking ? "walking to " : "using ") + Names.id(ctx.level().getBlockState(target).getBlock()) + " at " + Names.pos(target);
+        return (walking ? "walking to " : "using ") + name + " at " + Names.pos(target);
     }
 }

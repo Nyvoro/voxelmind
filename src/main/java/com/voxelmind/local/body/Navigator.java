@@ -49,7 +49,8 @@ public final class Navigator {
     private static final double BEHIND_DOOR = 0.15;
     /**
      * Doors (their lower cell) and gates each body opened and has not closed again, by body. They outlive one walk: a
-     * door the body still stood in when an action ended is closed on a later walk, once the body is past it.
+     * door the body still stood in when an action ended is closed on a later walk, once the body is past it; one the
+     * body is out of reach of is forgotten.
      */
     private static final Map<UUID, List<GlobalPos>> OPENED = new HashMap<>();
     /**
@@ -359,7 +360,7 @@ public final class Navigator {
         Hands.lookAt(body, hit.getLocation());
         if (!Hands.facing(body, hit.getLocation()) && ++openTicks < 10) return status;
         BlockState state = level.getBlockState(door);
-        BlockPos base = state.getBlock() instanceof DoorBlock && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER ? door.below() : door;
+        BlockPos base = base(state, door);
         if (openClicks++ >= MAX_DOOR_CLICKS || !Hands.inReach(body, door)) {
             return fail("could not open " + Names.id(state.getBlock()) + " at " + Names.pos(base));
         }
@@ -377,8 +378,9 @@ public final class Navigator {
 
     /**
      * Closes the doors and gates this body opened, as they were found: once it is PAST_DOOR blocks past one, or, when a
-     * walk ends, once it is clear of where the closed door stands; never while someone else stands in the door's cells,
-     * and only within reach.
+     * walk ends, once it has left the doorway (for a gate: where the closed gate stands); never while someone else stands
+     * in the door's cells. One out of reach, or in another dimension, is forgotten and stays as it is; that is checked
+     * before its block is read, so a remembered door far away never loads its chunk.
      */
     private void closeDoors(boolean walkEnded) {
         List<GlobalPos> doors = OPENED.get(body.getUUID());
@@ -386,25 +388,41 @@ public final class Navigator {
         ServerLevel level = Compat.level(body);
         for (Iterator<GlobalPos> it = doors.iterator(); it.hasNext(); ) {
             GlobalPos entry = it.next();
-            if (!entry.dimension().equals(level.dimension())) continue;
             BlockPos door = entry.pos();
+            if (!entry.dimension().equals(level.dimension()) || !Hands.inReach(body, door)) {
+                it.remove();
+                continue;
+            }
             BlockState state = level.getBlockState(door);
             boolean isDoor = state.getBlock() instanceof DoorBlock;
             if (!(isDoor || state.getBlock() instanceof FenceGateBlock) || !state.getValue(BlockStateProperties.OPEN)) {
                 it.remove();    // closed by someone else, or gone: nothing to restore
                 continue;
             }
-            AABB closed = state.setValue(BlockStateProperties.OPEN, false).getCollisionShape(level, door).bounds().move(door);
-            if (isDoor) closed = closed.expandTowards(0, 1, 0);
+            AABB cells = isDoor ? new AABB(door).expandTowards(0, 1, 0) : new AABB(door);
+            // A closed door's panel stands at the edge of its cell, clear of a body still standing in the doorway.
+            AABB closed = isDoor ? cells : state.setValue(BlockStateProperties.OPEN, false).getCollisionShape(level, door).bounds().move(door);
             boolean past = walkEnded ? !body.getBoundingBox().intersects(closed)
                     : body.position().distanceToSqr(Vec3.atBottomCenterOf(door)) >= PAST_DOOR * PAST_DOOR;
-            if (!past || !Hands.inReach(body, door)) continue;
-            AABB cells = isDoor ? new AABB(door).expandTowards(0, 1, 0) : new AABB(door);
+            if (!past) continue;
             if (!level.getEntitiesOfClass(LivingEntity.class, cells, e -> e != body && e.isAlive() && !e.isSpectator()).isEmpty()) continue;
             Hands.use(body, level, Hands.aim(body, level, isDoor ? door.above() : door));
             it.remove();
         }
         if (doors.isEmpty()) OPENED.remove(body.getUUID());
+    }
+
+    /** The body uses the door or gate at {@code pos} on purpose now: walking no longer closes it for the body. */
+    public static void forget(CompanionPlayer body, ServerLevel level, BlockPos pos) {
+        List<GlobalPos> doors = OPENED.get(body.getUUID());
+        if (doors == null) return;
+        doors.remove(GlobalPos.of(level.dimension(), base(level.getBlockState(pos), pos)));
+        if (doors.isEmpty()) OPENED.remove(body.getUUID());
+    }
+
+    /** The cell a door or gate is remembered by: the lower half of a door. */
+    private static BlockPos base(BlockState state, BlockPos pos) {
+        return state.getBlock() instanceof DoorBlock && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER ? pos.below() : pos;
     }
 
     /** Cells the body mines open to move from {@code prev} to {@code node}; doorways on the step are walked through instead. */

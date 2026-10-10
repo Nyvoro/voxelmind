@@ -18,6 +18,7 @@ import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -27,10 +28,14 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.LeverBlock;
+import net.minecraft.world.level.block.NoteBlock;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoorHingeSide;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Map;
 import java.util.UUID;
@@ -124,6 +129,14 @@ public class DoorGameTests {
 
     /** Runs actions one after another from a single tick handler. */
     private static void runSequence(GameTestHelper helper, CompanionPlayer body, BodyAction... actions) {
+        runSequence(helper, body, () -> {}, actions);
+    }
+
+    /**
+     * Runs actions one after another from a single tick handler; {@code between} runs when an action that has a successor
+     * ends, before the next one starts. (The tick handlers of a test run in no fixed order, so another handler could miss it.)
+     */
+    private static void runSequence(GameTestHelper helper, CompanionPlayer body, Runnable between, BodyAction... actions) {
         ActionContext ctx = new ActionContext(() -> body, UUID.randomUUID());
         int[] index = {0};
         actions[0].start(ctx);
@@ -131,6 +144,7 @@ public class DoorGameTests {
             BodyAction current = actions[index[0]];
             current.tick();
             if (current.finished() && index[0] + 1 < actions.length) {
+                between.run();
                 index[0]++;
                 actions[index[0]].start(ctx);
             }
@@ -157,6 +171,31 @@ public class DoorGameTests {
     private static void assertEnded(GameTestHelper helper, BodyAction action, BodyAction.Outcome outcome) {
         helper.assertTrue(action.finished(), "action still running: " + action.progress());
         helper.assertTrue(action.outcome() == outcome, action.call() + " ended " + action.outcome() + ": " + action.result());
+    }
+
+    /**
+     * Starts {@code walk} through DOOR (west to east) and preempts it once the body stands in the doorway clear of the
+     * west edge, where the closed door's panel stands; then runs {@code next}. Returns {stopped there, door open then}.
+     */
+    private static boolean[] stopInTheDoorway(GameTestHelper helper, CompanionPlayer body, BodyAction walk, BodyAction next) {
+        ActionContext ctx = new ActionContext(() -> body, UUID.randomUUID());
+        double middle = helper.absolutePos(DOOR).getX() + 0.5;
+        boolean[] seen = {false, false};
+        walk.start(ctx);
+        helper.onEachTick(() -> {
+            if (!walk.finished()) {
+                walk.tick();
+                if (!walk.finished() && at(helper, body).equals(DOOR) && body.getX() >= middle) {
+                    walk.preempt("stopped by the test");
+                    seen[0] = true;
+                    seen[1] = isOpen(helper, DOOR);
+                    next.start(ctx);
+                }
+            } else if (seen[0]) {
+                next.tick();
+            }
+        });
+        return seen;
     }
 
     @GameTest(maxTicks = 400)
@@ -263,15 +302,43 @@ public class DoorGameTests {
         BodyAction view = new ChestAction("use_chest(view)", "view", "", 1, "");
         BodyAction back = new GoToAction("go_to(back)", abs(helper, 0, 1, 6));
         boolean[] openAfterView = {false};
-        helper.onEachTick(() -> {
-            if (view.finished() && back.ticksRunning() == 0) openAfterView[0] = isOpen(helper, door);
-        });
-        runSequence(helper, body, view, back);
+        runSequence(helper, body, () -> openAfterView[0] = isOpen(helper, door), view, back);
         finishWhen(helper, body, () -> {
             assertEnded(helper, view, BodyAction.Outcome.DONE);
             assertEnded(helper, back, BodyAction.Outcome.DONE);
             helper.assertTrue(openAfterView[0], "the door was not open while the body stood in it; " + view.result());
             helper.assertFalse(isOpen(helper, door), "the door was left open; " + back.result());
+        });
+    }
+
+    @GameTest(maxTicks = 800)
+    public void forgetsADoorItWasCarriedAwayFrom(GameTestHelper helper) {
+        floor(helper);
+        BlockPos door = new BlockPos(2, 1, 3);
+        for (int z = 0; z < 8; z++) for (int y = 1; y <= 2; y++) if (z != door.getZ()) helper.setBlock(new BlockPos(2, y, z), Blocks.OAK_PLANKS);
+        door(helper, door, Blocks.OAK_DOOR);
+        helper.setBlock(new BlockPos(6, 1, 3), Blocks.CHEST);
+        CompanionPlayer body = spawn(helper, new BlockPos(0, 1, 3));
+        // use_chest leaves the door open around the body in the doorway; then the body is carried out of reach (as follow
+        // teleports it), walks there, is carried back and walks on two blocks past the door.
+        BodyAction view = new ChestAction("use_chest(view)", "view", "", 1, "");
+        BodyAction away = new GoToAction("go_to(away)", abs(helper, 7, 1, 5));
+        BodyAction past = new GoToAction("go_to(past the door)", abs(helper, 5, 1, 5));
+        BlockPos[] stops = {helper.absolutePos(new BlockPos(7, 1, 7)), helper.absolutePos(new BlockPos(4, 1, 3))};
+        int[] carried = {0};
+        boolean[] openAfterView = {false};
+        runSequence(helper, body, () -> {
+            if (carried[0] == 0) openAfterView[0] = isOpen(helper, door);
+            BlockPos to = stops[carried[0]++];
+            body.teleportTo(to.getX() + 0.5, to.getY(), to.getZ() + 0.5);
+            body.setDeltaMovement(Vec3.ZERO);
+        }, view, away, past);
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, view, BodyAction.Outcome.DONE);
+            assertEnded(helper, away, BodyAction.Outcome.DONE);
+            assertEnded(helper, past, BodyAction.Outcome.DONE);
+            helper.assertTrue(openAfterView[0], "the door was not open while the body stood in it; " + view.result());
+            helper.assertTrue(isOpen(helper, door), "the door was closed on a later walk after the body had been out of reach; " + past.result());
         });
     }
 
@@ -318,6 +385,207 @@ public class DoorGameTests {
             helper.assertTrue(helper.getBlockState(lever).getValue(LeverBlock.POWERED), "the lever is off");
             helper.assertTrue(body.getMainHandItem().is(Items.COBBLESTONE) && body.getMainHandItem().getCount() == 5,
                     "main hand holds " + Names.stack(body.getMainHandItem()));
+        });
+    }
+
+    @GameTest(maxTicks = 500)
+    public void leavesTheDoorOpenWhileStandingInIt(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction walk = new GoToAction("go_to(outside)", abs(helper, 7, 1, 2));
+        BodyAction on = new GoToAction("go_to(outside, again)", abs(helper, 7, 1, 2));
+        boolean[] seen = stopInTheDoorway(helper, body, walk, on);
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(seen[0], "the walk was never stopped in the doorway; " + walk.result());
+            helper.assertTrue(seen[1], "the door was closed while the body still stood in the doorway");
+            assertEnded(helper, on, BodyAction.Outcome.DONE);
+            helper.assertTrue(at(helper, body).getX() >= 5, "ended at " + at(helper, body) + "; " + on.result());
+            helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + on.result());
+        });
+    }
+
+    @GameTest(maxTicks = 500)
+    public void useBlockClosesADoorLeftOpen(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction walk = new GoToAction("go_to(outside)", abs(helper, 7, 1, 2));
+        BodyAction close = new UseBlockAction("use_block(door)", helper.absolutePos(DOOR));
+        boolean[] seen = stopInTheDoorway(helper, body, walk, close);
+        String doorAt = Names.pos(helper.absolutePos(DOOR));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(seen[0] && seen[1], "the walk did not stop in the open doorway; " + walk.result());
+            assertEnded(helper, close, BodyAction.Outcome.DONE);
+            helper.assertTrue(close.result().equals("used oak_door at " + doorAt + ": open true -> false"), close.result());
+            helper.assertFalse(isOpen(helper, DOOR), "the door is open; " + close.result());
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void walksThroughADoubleDoor(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        BlockPos pair = DOOR.north();
+        door(helper, pair, Blocks.OAK_DOOR);
+        helper.setBlock(pair, helper.getBlockState(pair).setValue(DoorBlock.HINGE, DoorHingeSide.RIGHT));
+        helper.setBlock(pair.above(), helper.getBlockState(pair.above()).setValue(DoorBlock.HINGE, DoorHingeSide.RIGHT));
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 1));
+        Map<Item, Integer> carried = carry(body);
+        boolean[] openedPair = watchOpen(helper, pair);
+        boolean[] openedDoor = watchOpen(helper, DOOR);
+        BodyAction action = run(helper, body, new GoToAction("go_to(outside)", abs(helper, 7, 1, 1)));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(at(helper, body).getX() >= 5, "ended at " + at(helper, body) + "; " + action.result());
+            helper.assertTrue(openedPair[0] || openedDoor[0], "neither door was opened; " + action.result());
+            helper.assertFalse(isOpen(helper, pair) || isOpen(helper, DOOR), "a door was left open; " + action.result());
+            helper.assertBlockPresent(Blocks.OAK_DOOR, pair);
+            helper.assertBlockPresent(Blocks.OAK_DOOR, DOOR);
+            for (int y = 1; y <= 2; y++) helper.assertBlockPresent(Blocks.OAK_PLANKS, new BlockPos(4, y, 3));
+            for (int y = 1; y <= 2; y++) helper.assertBlockPresent(Blocks.OAK_PLANKS, new BlockPos(4, y, 0));
+            helper.assertTrue(Inv.snapshot(body).equals(carried), "inventory changed to " + Inv.snapshot(body) + "; " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void walksInThroughTheDoorFromTheSide(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        // From the north-east the body reaches the cell in front of the door on a diagonal, offset toward the side where
+        // the open door's panel lies, and turns into the doorway.
+        CompanionPlayer body = spawn(helper, new BlockPos(7, 1, 0));
+        Map<Item, Integer> carried = carry(body);
+        boolean[] opened = watchOpen(helper, DOOR);
+        BodyAction action = run(helper, body, new GoToAction("go_to(inside)", abs(helper, 1, 1, 3)));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            BlockPos at = at(helper, body);
+            helper.assertTrue(at.getX() >= 1 && at.getX() <= 3 && at.getZ() >= 1 && at.getZ() <= 3, "ended at " + at + "; " + action.result());
+            helper.assertTrue(opened[0], "the door was never opened; " + action.result());
+            helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
+            assertRoomIntact(helper);
+            helper.assertTrue(Inv.snapshot(body).equals(carried), "inventory changed to " + Inv.snapshot(body) + "; " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 600)
+    public void stepsUpIntoADoorAndBackDown(GameTestHelper helper) {
+        floor(helper);
+        // The room stands on a one-block foundation: its door is one step above the ground outside.
+        for (int x = 0; x <= 4; x++) for (int z = 0; z <= 4; z++) {
+            helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
+            if (wall(x, z)) for (int y = 2; y <= 3; y++) helper.setBlock(new BlockPos(x, y, z), Blocks.OAK_PLANKS);
+            helper.setBlock(new BlockPos(x, 4, z), Blocks.OAK_PLANKS);
+        }
+        BlockPos door = DOOR.above();
+        door(helper, door, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(6, 1, 2));
+        Map<Item, Integer> carried = carry(body);
+        boolean[] opened = watchOpen(helper, door);
+        BodyAction in = new GoToAction("go_to(inside)", abs(helper, 2, 2, 2));
+        BodyAction out = new GoToAction("go_to(outside)", abs(helper, 6, 1, 2));
+        boolean[] closedBetween = {false};
+        runSequence(helper, body, () -> closedBetween[0] = !isOpen(helper, door), in, out);
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, in, BodyAction.Outcome.DONE);
+            assertEnded(helper, out, BodyAction.Outcome.DONE);
+            helper.assertTrue(opened[0], "the door was never opened; " + in.result());
+            helper.assertTrue(closedBetween[0], "the door stood open after walking in; " + in.result());
+            helper.assertTrue(at(helper, body).getX() >= 5 && at(helper, body).getY() == 1, "ended at " + at(helper, body) + "; " + out.result());
+            helper.assertFalse(isOpen(helper, door), "the door was left open; " + out.result());
+            for (int x = 0; x <= 4; x++) for (int z = 0; z <= 4; z++) {
+                helper.assertBlockPresent(Blocks.STONE, new BlockPos(x, 1, z));
+                if (wall(x, z)) for (int y = 2; y <= 3; y++) helper.assertBlockPresent(Blocks.OAK_PLANKS, new BlockPos(x, y, z));
+                helper.assertBlockPresent(Blocks.OAK_PLANKS, new BlockPos(x, 4, z));
+            }
+            helper.assertTrue(Inv.snapshot(body).equals(carried), "inventory changed to " + Inv.snapshot(body) + "; " + out.result());
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void walksOutOfAClosedDoorwayItStandsIn(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        // The body starts in the doorway with the door shut: the panel stands between it and the room.
+        CompanionPlayer body = spawn(helper, DOOR);
+        boolean[] opened = watchOpen(helper, DOOR);
+        BodyAction action = run(helper, body, new GoToAction("go_to(inside)", abs(helper, 1, 1, 2)));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(at(helper, body).getX() <= 3, "ended at " + at(helper, body) + "; " + action.result());
+            helper.assertTrue(opened[0], "the door was never opened; " + action.result());
+            helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
+            assertRoomIntact(helper);
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void leavesTheDoorOpenWhileSomeoneStandsInIt(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        helper.spawn(EntityTypes.ARMOR_STAND, DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction action = run(helper, body, new GoToAction("go_to(outside)", abs(helper, 7, 1, 2)));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertTrue(at(helper, body).getX() >= 5, "ended at " + at(helper, body) + "; " + action.result());
+            helper.assertTrue(isOpen(helper, DOOR), "the door was closed on the armor stand in the doorway; " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 300)
+    public void useBlockClosesTheScreenItOpens(GameTestHelper helper) {
+        floor(helper);
+        BlockPos table = new BlockPos(4, 1, 2);
+        helper.setBlock(table, Blocks.CRAFTING_TABLE);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction action = run(helper, body, new UseBlockAction("use_block(table)", helper.absolutePos(table)));
+        String at = Names.pos(helper.absolutePos(table));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.FAILED);
+            helper.assertTrue(action.result().startsWith("used crafting_table at " + at + ": it opened a screen, which was closed again at once"),
+                    action.result());
+            helper.assertTrue(body.containerMenu == body.inventoryMenu, "a menu is still open: " + body.containerMenu);
+        });
+    }
+
+    @GameTest(maxTicks = 300)
+    public void useBlockClosesTheSignEditor(GameTestHelper helper) {
+        floor(helper);
+        BlockPos sign = new BlockPos(4, 1, 2);
+        helper.setBlock(sign, Blocks.OAK_SIGN);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction action = run(helper, body, new UseBlockAction("use_block(sign)", helper.absolutePos(sign)));
+        String at = Names.pos(helper.absolutePos(sign));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.FAILED);
+            helper.assertTrue(action.result().startsWith("used oak_sign at " + at + ": it opened the sign's text editor, which was closed again at once"),
+                    action.result());
+            // While the sign is reserved for the body, nobody else can edit it.
+            SignBlockEntity entity = (SignBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(sign));
+            helper.assertTrue(entity != null && entity.getPlayerWhoMayEdit() == null, "the sign is still reserved for the body");
+        });
+    }
+
+    @GameTest(maxTicks = 400)
+    public void useBlockNeverDigsToABlock(GameTestHelper helper) {
+        floor(helper);
+        BlockPos note = new BlockPos(5, 1, 5);
+        for (int x = 4; x <= 6; x++) for (int y = 1; y <= 2; y++) for (int z = 4; z <= 6; z++) helper.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+        helper.setBlock(note, Blocks.NOTE_BLOCK);
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 1));
+        Map<Item, Integer> carried = carry(body);
+        BodyAction action = run(helper, body, new UseBlockAction("use_block(note)", helper.absolutePos(note)));
+        String at = Names.pos(helper.absolutePos(note));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.FAILED);
+            helper.assertTrue(action.result().startsWith("could not get within reach and sight of note_block at " + at), action.result());
+            helper.assertTrue(helper.getBlockState(note).getValue(NoteBlock.NOTE) == 0, "the note block was played");
+            for (int x = 4; x <= 6; x++) for (int y = 1; y <= 2; y++) for (int z = 4; z <= 6; z++) {
+                if (x != note.getX() || y != note.getY() || z != note.getZ()) helper.assertBlockPresent(Blocks.STONE, new BlockPos(x, y, z));
+            }
+            helper.assertTrue(Inv.snapshot(body).equals(carried), "inventory changed to " + Inv.snapshot(body) + "; " + action.result());
         });
     }
 }

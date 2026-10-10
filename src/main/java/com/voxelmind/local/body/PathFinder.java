@@ -194,8 +194,9 @@ public final class PathFinder {
             BlockPos down = pos.below();
             if (isWater(level, down) && passable(level, down)) out.add(new Step(down, 1.5));
         }
-        // A doorway is never built up in or dug down from: the door stands in it and on the block below.
-        if (mode.pillar() && !inWater && doorway == null && isFloor(level, pos.below())) {
+        // A doorway is never built up in or dug down from: the door stands in it and on the block below. Nor is the cell
+        // of a fence gate built up in: no block can be placed where the gate stands.
+        if (mode.pillar() && !inWater && !isPassage(level.getBlockState(pos)) && isFloor(level, pos.below())) {
             double head = clear(level, pos.above(2), mode);
             if (head < BLOCKED) out.add(new Step(pos.above(), 3.0 + head));
         }
