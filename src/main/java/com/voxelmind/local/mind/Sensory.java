@@ -3,6 +3,7 @@ package com.voxelmind.local.mind;
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.compat.Compat;
 import com.voxelmind.local.world.Inv;
+import com.voxelmind.local.world.Cover;
 import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Placed;
 import com.voxelmind.local.world.Resources;
@@ -280,39 +281,11 @@ public final class Sensory {
                 BlockState closest = e.getValue().closestState;
                 if (opens(closest) && closest.hasProperty(BlockStateProperties.OPEN)) {
                     out.append(closest.getValue(BlockStateProperties.OPEN) ? ", open" : ", closed");
-                    out.append(sides(level, e.getValue().closest, closest));
+                    out.append(Cover.sides(level, e.getValue().closest, closest));
                 }
             }
             out.append('\n');
         }
-    }
-
-    /**
-     * The two cells a door or fence gate is walked through between, along its facing axis, with what is above each:
-     * " (east side (x,y,z): under oak_planks at y=67 (placed by Gasade); west side (x,y,z): under open sky)".
-     */
-    private static String sides(ServerLevel level, BlockPos pos, BlockState state) {
-        if (state.is(BlockTags.TRAPDOORS) || !state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) return "";
-        BlockPos lower = state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
-                && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER ? pos.below() : pos;
-        Direction facing = state.getValue(BlockStateProperties.HORIZONTAL_FACING);
-        StringBuilder out = new StringBuilder(" (");
-        for (Direction d : new Direction[]{facing, facing.getOpposite()}) {
-            BlockPos side = lower.relative(d);
-            if (d != facing) out.append("; ");
-            out.append(d.getName()).append(" side ").append(Names.pos(side)).append(": under ").append(cover(level, side));
-        }
-        return out.append(')').toString();
-    }
-
-    /** What is over a standing cell: "open sky", or the first block above head height with its placer. */
-    private static String cover(ServerLevel level, BlockPos feet) {
-        int head = feet.getY() + 1;
-        int top = level.getHeight(Heightmap.Types.WORLD_SURFACE, feet.getX(), feet.getZ()) - 1;
-        if (top <= head) return "open sky";
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos(feet.getX(), head + 1, feet.getZ());
-        while (cursor.getY() < top && level.getBlockState(cursor).isAir()) cursor.move(Direction.UP);
-        return Names.id(level.getBlockState(cursor).getBlock()) + " at y=" + cursor.getY() + placedNote(level, cursor);
     }
 
     /** Doors, fence gates and trapdoors: features with an open or closed state. */

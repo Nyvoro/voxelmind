@@ -216,6 +216,8 @@ public class DoorGameTests {
             assertEnded(helper, action, BodyAction.Outcome.DONE);
             helper.assertTrue(at(helper, body).equals(DOOR), "a doorway target ends in the doorway, not next to it: " + at(helper, body) + "; " + action.result());
             helper.assertTrue(action.result().startsWith("arrived at "), action.result());
+            helper.assertTrue(action.result().contains("you stand in its doorway (east side " + Names.pos(helper.absolutePos(DOOR.east())) + ": under ")
+                    && action.result().contains("; west side " + Names.pos(helper.absolutePos(DOOR.west())) + ": under oak_planks at y="), action.result());
         });
     }
 

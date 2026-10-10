@@ -1,6 +1,7 @@
 package com.voxelmind.local.body;
 
 import com.voxelmind.local.compat.Compat;
+import com.voxelmind.local.world.Cover;
 import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Placed;
 import net.minecraft.core.BlockPos;
@@ -503,7 +504,7 @@ public final class Navigator {
     /** Where the body stands in the way of this open door closing ("you stand in its doorway"), or null when it does not. */
     private @Nullable String inTheWay(ServerLevel level, BlockPos door, BlockState state, boolean isDoor) {
         BlockPos at = feet();
-        if (isDoor && (at.equals(door) || at.equals(door.above()))) return "you stand in its doorway";
+        if (isDoor && (at.equals(door) || at.equals(door.above()))) return "you stand in its doorway" + Cover.sides(level, door, state);
         AABB closed = state.setValue(BlockStateProperties.OPEN, false).getCollisionShape(level, door).bounds().move(door);
         if (isDoor) closed = closed.expandTowards(0, 1, 0);
         // The closed panel stands at the edge of the door's cell, where it can miss a body still standing in the doorway.
