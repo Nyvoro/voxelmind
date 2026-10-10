@@ -125,8 +125,9 @@ public final class PathFinder {
     private static List<Step> neighbours(Level level, BlockPos pos, Mode mode) {
         List<Step> out = new ArrayList<>(16);
         boolean inWater = isWater(level, pos);
+        BlockState here = level.getBlockState(pos);
         // Standing in a doorway, the only ways out lead straight on through the door's opening.
-        Direction.@Nullable Axis doorway = doorAxis(level.getBlockState(pos));
+        Direction.@Nullable Axis doorway = doorAxis(here);
         for (int[] d : DIRS) {
             boolean diagonal = d[0] != 0 && d[1] != 0;
             BlockPos side = pos.offset(d[0], 0, d[1]);
@@ -196,7 +197,7 @@ public final class PathFinder {
         }
         // A doorway is never built up in or dug down from: the door stands in it and on the block below. Nor is the cell
         // of a fence gate built up in: no block can be placed where the gate stands.
-        if (mode.pillar() && !inWater && !isPassage(level.getBlockState(pos)) && isFloor(level, pos.below())) {
+        if (mode.pillar() && !inWater && !isPassage(here) && isFloor(level, pos.below())) {
             double head = clear(level, pos.above(2), mode);
             if (head < BLOCKED) out.add(new Step(pos.above(), 3.0 + head));
         }

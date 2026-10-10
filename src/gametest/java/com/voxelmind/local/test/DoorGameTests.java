@@ -174,18 +174,20 @@ public class DoorGameTests {
     }
 
     /**
-     * Starts {@code walk} through DOOR (west to east) and preempts it once the body stands in the doorway clear of the
-     * west edge, where the closed door's panel stands; then runs {@code next}. Returns {stopped there, door open then}.
+     * Starts {@code walk} through DOOR (west to east) and preempts it once the body stands in {@code cell} with its x, from
+     * the door's west edge (where the closed door's panel stands), in [from, to); then runs {@code next}. Returns {stopped
+     * there, door open right then}.
      */
-    private static boolean[] stopInTheDoorway(GameTestHelper helper, CompanionPlayer body, BodyAction walk, BodyAction next) {
+    private static boolean[] stopAt(GameTestHelper helper, CompanionPlayer body, BlockPos cell, double from, double to, BodyAction walk,
+            BodyAction next) {
         ActionContext ctx = new ActionContext(() -> body, UUID.randomUUID());
-        double middle = helper.absolutePos(DOOR).getX() + 0.5;
+        double edge = helper.absolutePos(DOOR).getX();
         boolean[] seen = {false, false};
         walk.start(ctx);
         helper.onEachTick(() -> {
             if (!walk.finished()) {
                 walk.tick();
-                if (!walk.finished() && at(helper, body).equals(DOOR) && body.getX() >= middle) {
+                if (!walk.finished() && at(helper, body).equals(cell) && body.getX() - edge >= from && body.getX() - edge < to) {
                     walk.preempt("stopped by the test");
                     seen[0] = true;
                     seen[1] = isOpen(helper, DOOR);
@@ -395,12 +397,31 @@ public class DoorGameTests {
         CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
         BodyAction walk = new GoToAction("go_to(outside)", abs(helper, 7, 1, 2));
         BodyAction on = new GoToAction("go_to(outside, again)", abs(helper, 7, 1, 2));
-        boolean[] seen = stopInTheDoorway(helper, body, walk, on);
+        // Stopped in the doorway, past the middle: the closed panel would not even touch the body.
+        boolean[] seen = stopAt(helper, body, DOOR, 0.5, 1.0, walk, on);
         finishWhen(helper, body, () -> {
             helper.assertTrue(seen[0], "the walk was never stopped in the doorway; " + walk.result());
             helper.assertTrue(seen[1], "the door was closed while the body still stood in the doorway");
             assertEnded(helper, on, BodyAction.Outcome.DONE);
             helper.assertTrue(at(helper, body).getX() >= 5, "ended at " + at(helper, body) + "; " + on.result());
+            helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + on.result());
+        });
+    }
+
+    @GameTest(maxTicks = 500)
+    public void closesTheDoorWhenStoppedJustPastIt(GameTestHelper helper) {
+        floor(helper);
+        room(helper, Blocks.OAK_DOOR);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
+        BodyAction walk = new GoToAction("go_to(outside)", abs(helper, 7, 1, 2));
+        BodyAction on = new GoToAction("go_to(outside, again)", abs(helper, 7, 1, 2));
+        // Stopped with its middle just out of the doorway: its back still reaches into the door's cell, but not to the
+        // west edge where the closed panel stands.
+        boolean[] seen = stopAt(helper, body, DOOR.east(), 1.0, 1.25, walk, on);
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(seen[0], "the walk was never stopped just past the door; " + walk.result());
+            helper.assertFalse(seen[1], "the door stayed open after the body had stepped out of the doorway");
+            assertEnded(helper, on, BodyAction.Outcome.DONE);
             helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + on.result());
         });
     }
@@ -412,7 +433,7 @@ public class DoorGameTests {
         CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 2));
         BodyAction walk = new GoToAction("go_to(outside)", abs(helper, 7, 1, 2));
         BodyAction close = new UseBlockAction("use_block(door)", helper.absolutePos(DOOR));
-        boolean[] seen = stopInTheDoorway(helper, body, walk, close);
+        boolean[] seen = stopAt(helper, body, DOOR, 0.5, 1.0, walk, close);
         String doorAt = Names.pos(helper.absolutePos(DOOR));
         finishWhen(helper, body, () -> {
             helper.assertTrue(seen[0] && seen[1], "the walk did not stop in the open doorway; " + walk.result());

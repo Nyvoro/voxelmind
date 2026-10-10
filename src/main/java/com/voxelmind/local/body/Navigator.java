@@ -378,9 +378,9 @@ public final class Navigator {
 
     /**
      * Closes the doors and gates this body opened, as they were found: once it is PAST_DOOR blocks past one, or, when a
-     * walk ends, once it has left the doorway (for a gate: where the closed gate stands); never while someone else stands
-     * in the door's cells. One out of reach, or in another dimension, is forgotten and stays as it is; that is checked
-     * before its block is read, so a remembered door far away never loads its chunk.
+     * walk ends, once it has stepped out of the doorway and is clear of where the closed door stands; never while someone
+     * else stands in the door's cells. One out of reach, or in another dimension, is forgotten and stays as it is; that is
+     * checked before its block is read, so a remembered door far away never loads its chunk.
      */
     private void closeDoors(boolean walkEnded) {
         List<GlobalPos> doors = OPENED.get(body.getUUID());
@@ -399,12 +399,15 @@ public final class Navigator {
                 it.remove();    // closed by someone else, or gone: nothing to restore
                 continue;
             }
-            AABB cells = isDoor ? new AABB(door).expandTowards(0, 1, 0) : new AABB(door);
-            // A closed door's panel stands at the edge of its cell, clear of a body still standing in the doorway.
-            AABB closed = isDoor ? cells : state.setValue(BlockStateProperties.OPEN, false).getCollisionShape(level, door).bounds().move(door);
-            boolean past = walkEnded ? !body.getBoundingBox().intersects(closed)
+            AABB closed = state.setValue(BlockStateProperties.OPEN, false).getCollisionShape(level, door).bounds().move(door);
+            if (isDoor) closed = closed.expandTowards(0, 1, 0);
+            // The closed panel stands at the edge of the door's cell, where it can miss a body still standing in the doorway.
+            BlockPos at = feet();
+            boolean inDoorway = isDoor && (at.equals(door) || at.equals(door.above()));
+            boolean past = walkEnded ? !inDoorway && !body.getBoundingBox().intersects(closed)
                     : body.position().distanceToSqr(Vec3.atBottomCenterOf(door)) >= PAST_DOOR * PAST_DOOR;
             if (!past) continue;
+            AABB cells = isDoor ? new AABB(door).expandTowards(0, 1, 0) : new AABB(door);
             if (!level.getEntitiesOfClass(LivingEntity.class, cells, e -> e != body && e.isAlive() && !e.isSpectator()).isEmpty()) continue;
             Hands.use(body, level, Hands.aim(body, level, isDoor ? door.above() : door));
             it.remove();
