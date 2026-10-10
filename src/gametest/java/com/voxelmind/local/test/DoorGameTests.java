@@ -6,6 +6,7 @@ import com.voxelmind.local.action.BodyAction;
 import com.voxelmind.local.action.ChestAction;
 import com.voxelmind.local.action.FollowAction;
 import com.voxelmind.local.action.GoToAction;
+import com.voxelmind.local.action.PlaceBlockAction;
 import com.voxelmind.local.action.UseBlockAction;
 import com.voxelmind.local.body.CompanionConnection;
 import com.voxelmind.local.body.CompanionPlayer;
@@ -234,6 +235,23 @@ public class DoorGameTests {
                     && action.result().contains("; oak_door is closed now"), action.result());
             helper.assertFalse(isOpen(helper, DOOR), "the door was left open; " + action.result());
             assertRoomIntact(helper);
+        });
+    }
+
+    @GameTest(maxTicks = 200)
+    public void placingABlockAgainstADoorPlacesItAndLeavesTheDoorShut(GameTestHelper helper) {
+        floor(helper);
+        // The cell beside the upper half of a closed door, with air below it: the door is the only block to place against.
+        door(helper, DOOR, Blocks.OAK_DOOR);
+        BlockPos target = DOOR.above().west();
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 2));
+        body.getInventory().add(new ItemStack(Items.OAK_PLANKS, 4));
+        BodyAction action = run(helper, body, new PlaceBlockAction("place_block(oak_planks)", "oak_planks",
+                abs(helper, target.getX(), target.getY(), target.getZ())));
+        finishWhen(helper, body, () -> {
+            assertEnded(helper, action, BodyAction.Outcome.DONE);
+            helper.assertBlockPresent(Blocks.OAK_PLANKS, target);
+            helper.assertFalse(isOpen(helper, DOOR), "placing against the door opened it; " + action.result());
         });
     }
 

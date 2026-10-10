@@ -1,13 +1,13 @@
 package com.voxelmind.local.action;
 
 import com.voxelmind.local.body.CompanionPlayer;
+import com.voxelmind.local.body.Hands;
 import com.voxelmind.local.body.Navigator;
 import com.voxelmind.local.world.Inv;
 import com.voxelmind.local.world.Names;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
@@ -129,8 +129,7 @@ public final class PlaceBlockAction extends BodyAction {
         }
         int before = Inv.count(body, item);
         Vec3 hit = Vec3.atCenterOf(support).add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
-        body.gameMode.useItemOn(body, level, body.getMainHandItem(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, face, support, false));
-        body.swing(InteractionHand.MAIN_HAND);
+        Hands.placeClick(body, level, new BlockHitResult(hit, face, support, false));
         BlockState now = level.getBlockState(target);
         int after = Inv.count(body, item);
         if (now.is(block) || after < before) {

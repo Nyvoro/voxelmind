@@ -17,6 +17,13 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CakeBlock;
+import net.minecraft.world.level.block.CandleCakeBlock;
+import net.minecraft.world.level.block.ComposterBlock;
+import net.minecraft.world.level.block.DiodeBlock;
+import net.minecraft.world.level.block.DragonEggBlock;
+import net.minecraft.world.level.block.NoteBlock;
+import net.minecraft.world.level.block.RespawnAnchorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -186,7 +193,7 @@ public final class Hands {
         }
     }
 
-    /** Right-click places one carried {@code item} at {@code target} against a solid neighbour. */
+    /** Right-click places one carried {@code item} at {@code target} against a solid neighbour (see {@link #placeClick}). */
     public static boolean place(CompanionPlayer body, ServerLevel level, Item item, BlockPos target) {
         if (!level.getBlockState(target).canBeReplaced()) return false;
         BlockPos support = null;
@@ -205,9 +212,35 @@ public final class Hands {
         BlockState before = level.getBlockState(target);
         Vec3 hit = Vec3.atCenterOf(support).add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
         lookAt(body, hit);
-        body.gameMode.useItemOn(body, level, body.getMainHandItem(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, face, support, false));
-        body.swing(InteractionHand.MAIN_HAND);
+        placeClick(body, level, new BlockHitResult(hit, face, support, false));
         return level.getBlockState(target) != before;
+    }
+
+    /**
+     * The right-click that places the held block against the clicked block. A player sneaks for it when the clicked block
+     * reacts to a plain click (a door would open, a chest or crafting table its screen, a bed would set the respawn point);
+     * so does the body, only then, so a chest placed against the floor still joins a chest beside it.
+     */
+    public static void placeClick(CompanionPlayer body, ServerLevel level, BlockHitResult hit) {
+        boolean sneak = reactsToUse(level, hit.getBlockPos(), level.getBlockState(hit.getBlockPos()));
+        boolean sneaking = body.isShiftKeyDown();
+        if (sneak) body.setShiftKeyDown(true);
+        try {
+            body.gameMode.useItemOn(body, level, body.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
+        } finally {
+            if (sneak) body.setShiftKeyDown(sneaking);
+        }
+        body.swing(InteractionHand.MAIN_HAND);
+    }
+
+    /** Whether a plain right-click on this block does something of its own: opens, toggles, plays, eats or teleports it. */
+    public static boolean reactsToUse(ServerLevel level, BlockPos pos, BlockState state) {
+        Block block = state.getBlock();
+        return level.getBlockEntity(pos) != null || state.getMenuProvider(level, pos) != null
+                || state.is(BlockTags.DOORS) || state.is(BlockTags.TRAPDOORS) || state.is(BlockTags.FENCE_GATES)
+                || state.is(BlockTags.CAULDRONS) || state.is(BlockTags.FLOWER_POTS)
+                || block instanceof NoteBlock || block instanceof DiodeBlock || block instanceof CakeBlock || block instanceof CandleCakeBlock
+                || block instanceof ComposterBlock || block instanceof RespawnAnchorBlock || block instanceof DragonEggBlock;
     }
 
     /**
