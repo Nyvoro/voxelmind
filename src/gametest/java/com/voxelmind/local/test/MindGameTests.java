@@ -38,7 +38,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -47,8 +52,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MindGameTests {
     private static final AtomicInteger COUNTER = new AtomicInteger();
-    /** Part of every name, so a companion file left behind by a failed run cannot block a summon in the next one. */
-    private static final String RUN = Integer.toString(ThreadLocalRandom.current().nextInt(100, 1000));
+    /**
+     * Part of every name, so a companion file or decision log left behind by an earlier run (the test world is kept)
+     * cannot block a summon or add entries to a log in this one.
+     */
+    private static final String RUN = String.format("%05d", ThreadLocalRandom.current().nextInt(100_000));
     /**
      * The mind decides on the wall clock (debounce, HTTP) while the test server ticks as fast as it can. The deadline is
      * longer than the 60 s the Player2 test may block the server thread.
@@ -57,10 +65,18 @@ public class MindGameTests {
     private static final int MAX_TICKS = 100_000;
     private static final String EMPTY = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}]}";
 
-    /** Canned answers by companion name; other callers (minds of tests running at the same time) get an empty message. */
-    private static final Map<String, String> ANSWERS = new ConcurrentHashMap<>();
+    /**
+     * Canned answers by companion name, one per request in order (the last one repeats); other callers (minds of tests
+     * running at the same time) get an empty message.
+     */
+    private static final Map<String, List<String>> ANSWERS = new ConcurrentHashMap<>();
     private static final Map<String, AtomicInteger> REQUESTS = new ConcurrentHashMap<>();
+    /** The user message of each request by companion name, in order. */
+    private static final Map<String, List<String>> PROMPTS = new ConcurrentHashMap<>();
+    /** Answers the stub holds back until the test releases them, by "name#request number". */
+    private static final Map<String, CountDownLatch> HELD = new ConcurrentHashMap<>();
     private static HttpServer stub;
+    private static ExecutorService stubThreads;
     private static int stubUsers;
     private static String baseUrlBefore = "";
     private static int budgetBefore;
@@ -72,6 +88,13 @@ public class MindGameTests {
         if (stubUsers++ > 0) return;
         stub = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         stub.createContext("/", MindGameTests::answer);
+        // A held answer must not keep the other tests' requests waiting.
+        stubThreads = Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r, "vml-test-stub");
+            t.setDaemon(true);
+            return t;
+        });
+        stub.setExecutor(stubThreads);
         stub.start();
         LocalConfig config = LocalConfig.get();
         baseUrlBefore = config.baseUrl;
@@ -85,17 +108,34 @@ public class MindGameTests {
         LocalConfig config = LocalConfig.get();
         config.baseUrl = baseUrlBefore;
         config.maxRequestsPerMinute = budgetBefore;
+        HELD.values().forEach(CountDownLatch::countDown);
         stub.stop(0);
+        stubThreads.shutdown();
         stub = null;
     }
 
     private static void answer(HttpExchange exchange) throws IOException {
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         String reply = EMPTY;
-        for (Map.Entry<String, String> e : ANSWERS.entrySet()) {
-            if (!body.contains("You are " + e.getKey() + ".")) continue;
-            REQUESTS.computeIfAbsent(e.getKey(), k -> new AtomicInteger()).incrementAndGet();
-            reply = e.getValue();
+        String user = "";
+        try {
+            JsonArray messages = JsonParser.parseString(body).getAsJsonObject().getAsJsonArray("messages");
+            user = messages.get(messages.size() - 1).getAsJsonObject().get("content").getAsString();
+        } catch (RuntimeException ignored) {
+        }
+        for (Map.Entry<String, List<String>> e : ANSWERS.entrySet()) {
+            if (!user.contains("You are " + e.getKey() + ".")) continue;
+            int n = REQUESTS.computeIfAbsent(e.getKey(), k -> new AtomicInteger()).incrementAndGet();
+            PROMPTS.computeIfAbsent(e.getKey(), k -> new CopyOnWriteArrayList<>()).add(user);
+            reply = e.getValue().get(Math.min(n, e.getValue().size()) - 1);
+            CountDownLatch held = HELD.get(e.getKey() + "#" + n);
+            if (held != null) {
+                try {
+                    held.await(DEADLINE_MS, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
         }
         byte[] bytes = reply.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -105,9 +145,26 @@ public class MindGameTests {
         }
     }
 
+    /** The stub keeps the answer to this request of the companion until the returned latch is released. */
+    private static CountDownLatch hold(Companion c, int request) {
+        CountDownLatch latch = new CountDownLatch(1);
+        HELD.put(c.name() + "#" + request, latch);
+        return latch;
+    }
+
+    /** The user message of the companion's n-th request, or "". */
+    private static String prompt(Companion c, int n) {
+        List<String> prompts = PROMPTS.getOrDefault(c.name(), List.of());
+        return prompts.size() >= n ? prompts.get(n - 1) : "";
+    }
+
     private static JsonObject call(String name, String... pairs) {
         JsonObject args = new JsonObject();
         for (int i = 0; i < pairs.length; i += 2) args.addProperty(pairs[i], pairs[i + 1]);
+        return call(name, args);
+    }
+
+    private static JsonObject call(String name, JsonObject args) {
         JsonObject function = new JsonObject();
         function.addProperty("name", name);
         function.addProperty("arguments", args.toString());
@@ -157,10 +214,10 @@ public class MindGameTests {
         return p;
     }
 
-    /** A new companion next to its owner; the stub gives this answer to each of its decisions. */
-    private static Companion summon(GameTestHelper helper, ServerPlayer owner, String answer) {
+    /** A new companion next to its owner; the stub gives these answers to its decisions in order, the last one repeating. */
+    private static Companion summon(GameTestHelper helper, ServerPlayer owner, String... answers) {
         String name = "Mind" + RUN + "_" + COUNTER.incrementAndGet();
-        ANSWERS.put(name, answer);
+        ANSWERS.put(name, List.of(answers));
         String error = CompanionManager.get().summon(owner, name, null);
         helper.assertTrue(error == null, "summon: " + error);
         Companion c = CompanionManager.get().find(owner.getUUID(), name);
@@ -187,6 +244,9 @@ public class MindGameTests {
             CompanionManager.get().delete(c);
             helper.getLevel().getServer().getPlayerList().remove(owner);
             ANSWERS.remove(c.name());
+            HELD.forEach((key, latch) -> {
+                if (key.startsWith(c.name() + "#")) latch.countDown();
+            });
             releaseStub();
         };
         helper.succeedWhen(() -> {
@@ -316,6 +376,100 @@ public class MindGameTests {
             boolean dug = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("result") && e.text.startsWith("dig("));
             helper.assertFalse(dug || started(c, "dig"), "dig did not run");
             helper.assertTrue(requests(c) == 1, "one request, got " + requests(c));
+            List<String> log = decisionLog(c);
+            String applied = log.isEmpty() ? "" : JsonParser.parseString(log.getFirst()).getAsJsonObject().get("applied").getAsString();
+            // tools/e2e/say-do.cjs reads "superseded" or "not executed" in applied as a decision that was not carried out at all.
+            helper.assertTrue(applied.contains(" + started go_to(") && applied.endsWith(" + extra say skipped + extra dig skipped")
+                    && !applied.matches("(?is).*(superseded|not executed).*"), "applied: " + applied);
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aNewerChatSupersedesTheDecisionInFlight(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        String name = owner.getGameProfile().name();
+        Companion c = summon(helper, owner, completion(call("say", "text", "A stale line."), call("dig", "direction", "down")),
+                completion(call("say", "text", "A fresh line."), call("follow", "target", "owner")));
+        CountDownLatch late = hold(c, 1);
+        c.hear(name, true, "Dig down right here.", "public");
+        boolean[] step = {false, false};
+        helper.onEachTick(() -> {
+            if (!step[0] && requests(c) == 1) {
+                // The owner speaks again while the first decision still waits for its answer.
+                step[0] = true;
+                c.hear(name, true, "No, follow me instead.", "public");
+            }
+            if (step[0] && !step[1] && sent(c, "A fresh line.") != null) {
+                // The first decision's answer arrives after the newer decision was carried out.
+                step[1] = true;
+                late.countDown();
+            }
+        });
+        expect(helper, owner, c, () -> {
+            List<String> log = decisionLog(c);
+            helper.assertTrue(log.stream().anyMatch(l -> l.contains("\"applied\":\"superseded by a newer wake\"") && l.contains("A stale line.")),
+                    "the late answer is logged as superseded: " + log);
+            helper.assertTrue(sent(c, "A fresh line.") != null && started(c, "follow"), "the newer decision was carried out");
+            helper.assertTrue(sent(c, "A stale line.") == null, "the late answer's line was never sent");
+            boolean dug = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("result") && e.text.startsWith("dig("));
+            helper.assertFalse(dug || started(c, "dig"), "the late answer's dig never ran");
+            helper.assertTrue(requests(c) == 2, "two requests, got " + requests(c));
+            helper.assertTrue(prompt(c, 2).contains("No, follow me instead."), "the newer decision heard the newer chat");
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aDecisionThatOnlySpeaksRenewsTheRetry(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        String name = owner.getGameProfile().name();
+        Companion c = summon(helper, owner, EMPTY, completion(call("say", "text", "Sorry, here I am.")), EMPTY,
+                completion(call("say", "text", "Here again.")));
+        c.hear(name, true, "Hello?", "public");
+        boolean[] asked = {false};
+        helper.onEachTick(() -> {
+            if (!asked[0] && sent(c, "Sorry, here I am.") != null) {
+                asked[0] = true;
+                c.hear(name, true, "Hello again?", "public");
+            }
+        });
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(sent(c, "Here again.") != null, "the second answer without a tool call got its retry too; requests: " + requests(c));
+            helper.assertTrue(requests(c) == 4, "four requests, got " + requests(c));
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aDecisionDuringAWaitSeesTheWait(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        JsonObject wait = new JsonObject();
+        wait.addProperty("seconds", 60);
+        wait.addProperty("for_what", "my owner");
+        Companion c = summon(helper, owner, completion(call("wait", wait)), completion(call("say", "text", "Still waiting here.")));
+        CountDownLatch first = hold(c, 1);
+        c.hear(owner.getGameProfile().name(), true, "Wait here for me.", "public");
+        boolean[] woke = {false};
+        helper.onEachTick(() -> {
+            if (!woke[0] && requests(c) == 1) {
+                // An event during the first decision queues behind it; the decision it wakes comes while the chosen wait runs.
+                woke[0] = true;
+                c.mind.wake("a test event", 0);
+                first.countDown();
+            }
+        });
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(sent(c, "Still waiting here.") != null, "the second decision spoke; requests: " + requests(c));
+            String during = prompt(c, 2);
+            helper.assertTrue(during.contains("Woke by: a test event") && during.contains("WAIT: wait(seconds=60, for_what=\"my owner\") running for "),
+                    "the decision during the wait sees it:\n" + during);
+            helper.assertFalse(prompt(c, 1).contains("WAIT:"), "no wait line while none runs");
+            boolean ended = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("result") && e.text.startsWith("wait("));
+            helper.assertFalse(ended, "a decision that only speaks leaves the wait running");
         });
     }
 

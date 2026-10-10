@@ -21,7 +21,7 @@ public final class PromptBuilder {
 
     public record Prompt(String system, String user) {}
 
-    /** {@code context} is {@link #context(Companion, String)} of this wake. */
+    /** {@code context} is {@link #context(Companion, String, String)} of this wake. */
     public static Prompt decision(Companion c, String context) {
         String system = PromptTexts.SURVIVAL_FRAME + "\n\n" + PromptTexts.CONVERSATION_FRAME + "\n\n" + PromptTexts.language(language(c));
         return new Prompt(system, context + "\n" + PromptTexts.decision(c.actionRunning()));
@@ -39,7 +39,8 @@ public final class PromptBuilder {
         return name.isBlank() ? "auto" : name;
     }
 
-    static String context(Companion c, String wokeBy) {
+    /** {@code waiting} describes the companion's running wait, or is empty. */
+    static String context(Companion c, String wokeBy, String waiting) {
         CompanionState s = c.state;
         CompanionPlayer body = c.body();
         StringBuilder out = new StringBuilder();
@@ -77,6 +78,7 @@ public final class PromptBuilder {
                     .append(inTimeline ? " (its result is the newest result row in [TIMELINE])" : " — \"" + last.result() + "\"")
                     .append(". Executor result: ").append(last.outcome()).append(".\n");
         }
+        if (!waiting.isEmpty()) out.append("WAIT: ").append(waiting).append(".\n");
         out.append('\n');
 
         out.append("[PREVIOUSLY]\n").append(s.memory.previously.isBlank() ? "Nothing recorded yet." : s.memory.previously.trim()).append("\n\n");

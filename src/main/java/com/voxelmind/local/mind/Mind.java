@@ -129,7 +129,7 @@ public final class Mind {
         }
         String wokeBy = String.join("; ", reasons);
         clearWants();
-        PromptBuilder.Prompt prompt = PromptBuilder.decision(c, PromptBuilder.context(c, wokeBy));
+        PromptBuilder.Prompt prompt = PromptBuilder.decision(c, PromptBuilder.context(c, wokeBy, waitLine(now)));
         JsonArray tools = Tools.decisionTools(c.actionRunning());
         int id = ++request;
         inFlight = true;
@@ -180,18 +180,23 @@ public final class Mind {
         List<String> applied = new ArrayList<>();
         boolean said = false;
         boolean acted = false;
+        boolean spoke = false;
         for (LlmClient.ToolCall call : calls) {
             boolean say = call.name().equals("say");
             if (say ? said : acted) {
                 c.event("note", "your extra tool call " + Tools.callText(call.name(), call.arguments())
                         + (say ? " was not sent: one say per decision" : " was not executed: one action per decision"), false, null);
-                applied.add("extra " + call.name() + (say ? " not sent" : " not executed"));
+                applied.add("extra " + call.name() + " skipped");
                 continue;
             }
             if (say) said = true;
             else acted = true;
-            applied.add(apply(Tools.parse(call.name(), call.arguments()), say));
+            Tools.Choice choice = Tools.parse(call.name(), call.arguments());
+            spoke |= choice instanceof Tools.Say;
+            applied.add(apply(choice, say));
         }
+        // A decision that only speaks is complete too, so a later technical failure gets its one retry again.
+        if (spoke && !acted) invalidStreak = 0;
         logCall(wokeBy, prompt, response, null, String.join(" + ", applied));
     }
 
@@ -241,9 +246,19 @@ public final class Mind {
         }
     }
 
-    /** A timer decision can come during a wait; a newer body choice ends that wait the way it replaces a running action. */
+    /**
+     * A decision can come during a wait (a timer, or a wake that queued behind the decision that chose the wait); a newer
+     * body choice ends that wait the way it replaces a running action.
+     */
     private void replaceWait(String call) {
         if (waitUntil > 0) endWait("wait replaced after " + ((System.currentTimeMillis() - waitStarted) / 1000) + "s by your newer choice " + call, "preempted");
+    }
+
+    /** The running wait for the prompt of a decision that comes during it; empty when none runs. */
+    private String waitLine(long now) {
+        if (waitUntil == 0) return "";
+        return waitCall + " running for " + ((now - waitStarted) / 1000) + "s of " + ((waitUntil - waitStarted) / 1000)
+                + "s; any new event, stop, wait or another body action ends it";
     }
 
     private void onError(Throwable error) {

@@ -7,7 +7,7 @@ LOG = 'V:/VoxelMind/voxelmind-local/run/world/voxelmind-local/logs/Lysa.jsonl'
 prompt = None
 for line in open(LOG, encoding='utf-8'):
     r = json.loads(line)
-    if r.get('lane') == 'action' and r.get('prompt'):
+    if r.get('lane') in ('action', 'decision') and r.get('prompt'):
         prompt = r['prompt']
 tools = [
     {"type": "function", "function": {"name": n, "description": d, "parameters": {"type": "object", "properties": {"target": {"type": "string"}}, "required": []}}}
