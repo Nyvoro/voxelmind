@@ -7,7 +7,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.Nullable;
 
@@ -19,7 +22,8 @@ import java.util.function.Predicate;
 
 /**
  * A* over standing positions of a player-sized body. Walking mode: walk, diagonal
- * walk, one-block jumps, drops of up to three blocks, swimming. Digging mode adds
+ * walk, one-block jumps, drops of up to three blocks, swimming, and straight through
+ * doors and fence gates (closed ones the body opens by hand). Digging mode adds
  * mining through natural terrain and building one-block pillar steps with
  * carried blocks; their cost is the real break time.
  */
@@ -27,6 +31,8 @@ public final class PathFinder {
     private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
     public static final int MAX_DROP = 3;
     private static final double BLOCKED = Double.MAX_VALUE;
+    /** Extra cost per closed door half or gate on a step: the body stops and opens it first. */
+    private static final double CLOSED_DOOR = 1.0;
 
     /** Walking only, or also digging/building for a given body. */
     public record Mode(boolean dig, boolean pillar, @Nullable CompanionPlayer body, @Nullable Predicate<BlockPos> protect) {
@@ -65,7 +71,9 @@ public final class PathFinder {
     /**
      * Searches from {@code start} until {@code goal} accepts a position. When the
      * node budget runs out, returns the path to the explored position closest to
-     * {@code target} so the caller can walk there and search again.
+     * {@code target} so the caller can walk there and search again. A doorway ends
+     * a route only when it is the target itself: standing in it, the door could not
+     * be closed again.
      */
     public static Result find(Level level, BlockPos start, BlockPos target, Predicate<BlockPos> goal, int maxNodes, Mode mode) {
         Long2ObjectOpenHashMap<Node> nodes = new Long2ObjectOpenHashMap<>();
@@ -84,7 +92,9 @@ public final class PathFinder {
             if (current.closed) continue;
             current.closed = true;
             expanded++;
-            if (goal.test(current.pos)) return new Result(trace(current), true, expanded);
+            if (goal.test(current.pos) && (current.pos.equals(target) || !isPassage(level.getBlockState(current.pos)))) {
+                return new Result(trace(current), true, expanded);
+            }
             double h = heuristic(current.pos, target);
             if (h < bestH) {
                 bestH = h;
@@ -115,9 +125,14 @@ public final class PathFinder {
     private static List<Step> neighbours(Level level, BlockPos pos, Mode mode) {
         List<Step> out = new ArrayList<>(16);
         boolean inWater = isWater(level, pos);
+        BlockState here = level.getBlockState(pos);
+        // Standing in a doorway, the only ways out lead straight on through the door's opening.
+        Direction.@Nullable Axis doorway = doorAxis(here);
         for (int[] d : DIRS) {
             boolean diagonal = d[0] != 0 && d[1] != 0;
             BlockPos side = pos.offset(d[0], 0, d[1]);
+            Direction.Axis axis = d[0] != 0 ? Direction.Axis.X : Direction.Axis.Z;
+            if (doorway != null && (diagonal || axis != doorway)) continue;
             if (diagonal) {
                 if (!bodyFits(level, pos.offset(d[0], 0, 0)) || !bodyFits(level, pos.offset(0, 0, d[1]))) continue;
                 if (standable(level, side)) out.add(new Step(side, 1.414 + penalty(level, side)));
@@ -130,6 +145,17 @@ public final class PathFinder {
             BlockPos up = side.above();
             if (passable(level, pos.above(2)) && standable(level, up)) {
                 out.add(new Step(up, 2.0 + penalty(level, up)));
+                continue;
+            }
+            // Through a door or fence gate, level or one step up.
+            double door = through(level, side, axis);
+            if (door < BLOCKED && isFloor(level, side.below())) {
+                out.add(new Step(side, 1.0 + door));
+                continue;
+            }
+            door = through(level, up, axis);
+            if (door < BLOCKED && passable(level, pos.above(2)) && isFloor(level, side)) {
+                out.add(new Step(up, 2.0 + door));
                 continue;
             }
             boolean dropped = false;
@@ -169,11 +195,13 @@ public final class PathFinder {
             BlockPos down = pos.below();
             if (isWater(level, down) && passable(level, down)) out.add(new Step(down, 1.5));
         }
-        if (mode.pillar() && !inWater && isFloor(level, pos.below())) {
+        // A doorway is never built up in or dug down from: the door stands in it and on the block below. Nor is the cell
+        // of a fence gate built up in: no block can be placed where the gate stands.
+        if (mode.pillar() && !inWater && !isPassage(here) && isFloor(level, pos.below())) {
             double head = clear(level, pos.above(2), mode);
             if (head < BLOCKED) out.add(new Step(pos.above(), 3.0 + head));
         }
-        if (mode.dig() && !inWater) {
+        if (mode.dig() && !inWater && doorway == null) {
             BlockPos down = pos.below();
             double cost = clear(level, down, mode);
             if (cost > 0 && cost < BLOCKED && !isHazardBelow(level, down)) {
@@ -250,6 +278,48 @@ public final class PathFinder {
         if (isHazard(state)) return false;
         if (state.getFluidState().is(FluidTags.LAVA)) return false;
         return state.getCollisionShape(level, pos).isEmpty();
+    }
+
+    /**
+     * Cost of standing up in {@code feet} on a step along {@code axis} through a door or fence gate: 0 through an open
+     * one, CLOSED_DOOR per closed half or gate the body opens by hand first, BLOCKED otherwise. A door is passed only
+     * through its opening (along its facing axis, feet in the lower half, head in the upper), where the panel of the
+     * open door lies at the side of the cell; an open fence gate has nothing left to bump into.
+     */
+    private static double through(Level level, BlockPos feet, Direction.Axis axis) {
+        return through(level, feet, axis, DoubleBlockHalf.LOWER) + through(level, feet.above(), axis, DoubleBlockHalf.UPPER);
+    }
+
+    private static double through(Level level, BlockPos cell, Direction.Axis axis, DoubleBlockHalf half) {
+        BlockState state = level.getBlockState(cell);
+        if (state.getBlock() instanceof DoorBlock) {
+            if (doorAxis(state) != axis || state.getValue(DoorBlock.HALF) != half) return BLOCKED;
+            return state.getValue(DoorBlock.OPEN) ? 0 : opensByHand(state) ? CLOSED_DOOR : BLOCKED;
+        }
+        if (opensByHand(state)) return CLOSED_DOOR;
+        return passable(level, cell) ? 0 : BLOCKED;
+    }
+
+    /** A door or fence gate: walked through, never stood in, so it can be closed again. */
+    public static boolean isPassage(BlockState state) {
+        return state.getBlock() instanceof DoorBlock || state.getBlock() instanceof FenceGateBlock;
+    }
+
+    /** The axis a body walks through this door along (its facing axis); null when it is not a door. */
+    private static Direction.@Nullable Axis doorAxis(BlockState state) {
+        return state.getBlock() instanceof DoorBlock ? state.getValue(DoorBlock.FACING).getAxis() : null;
+    }
+
+    /** A closed door or fence gate a player opens by hand: wooden and copper doors and every fence gate, not iron doors. */
+    public static boolean opensByHand(BlockState state) {
+        if (state.getBlock() instanceof DoorBlock door) return !state.getValue(DoorBlock.OPEN) && door.type().canOpenByHand();
+        return state.getBlock() instanceof FenceGateBlock && !state.getValue(FenceGateBlock.OPEN);
+    }
+
+    /** A door cell a route walks through rather than clears: an open door of any kind, or a closed one opened by hand. */
+    public static boolean isDoorway(Level level, BlockPos cell) {
+        BlockState state = level.getBlockState(cell);
+        return state.getBlock() instanceof DoorBlock && (state.getValue(DoorBlock.OPEN) || opensByHand(state));
     }
 
     public static boolean isFloor(Level level, BlockPos pos) {

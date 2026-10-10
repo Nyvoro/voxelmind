@@ -64,66 +64,83 @@ public final class Tools {
      * single tool call per response (gpt-oss, Player2's free model) can so speak and act in one decision.
      */
     public static final String SAY_ARGUMENT = "say";
+    /** What walking does at doors, in the description of every tool that walks. */
+    private static final String DOORS = " Walking opens wooden and copper doors and fence gates on the way and closes the ones it "
+            + "opened behind you; iron doors stay shut.";
 
     static {
         action("go_to", "Walk to a target: a player name, \"owner\", an entity id like \"#57\", coordinates \"x y z\", a compass direction "
                         + "(about 24 blocks that way), or a creature or block name (the nearest one). One call is one travel leg; the result "
-                        + "reports where you arrived or why the route failed. If your owner is more than 64 blocks away you teleport next to them.",
+                        + "reports where you arrived or why the route failed. If your owner is more than 64 blocks away you teleport next to them."
+                        + DOORS,
                 params(req("target", str("Where to go.")), null),
                 (a, call) -> new Body(new GoToAction(call, s(a, "target"))));
         action("follow", "Stay close to a moving player or creature. Runs for about a minute, then you decide again. "
-                        + "If your owner gets more than 40 blocks ahead you teleport next to them.",
+                        + "If your owner gets more than 40 blocks ahead you teleport next to them." + DOORS,
                 params(req("target", str("Player name, \"owner\" or an entity id like \"#57\".")), null),
                 (a, call) -> new Body(new FollowAction(call, s(a, "target"))));
         action("explore", "Walk out in one compass direction to look around: nearby is about 72 blocks, wide about 110. With a "
                         + "target it stops as soon as that comes into view (trees, water, animals, village, ore, or a creature or block "
-                        + "name). Walks only, never digs. Without a direction a random one is chosen.",
+                        + "name). Walks only, never digs. Without a direction a random one is chosen." + DOORS,
                 params(opt("target", str("What to look for.")), opt("direction", enumOf("Compass direction.", "north", "northeast", "east",
                         "southeast", "south", "southwest", "west", "northwest")), opt("scope", enumOf("How far.", "nearby", "wide"))),
                 (a, call) -> new Body(new ExploreAction(call, s(a, "target"), s(a, "direction"), s(a, "scope"))));
         action("mine_block", "Mine ONE block — the nearest visible block of a type, or the block at given coordinates. Walks into reach "
                         + "itself, mines blocks in the way first, uses your best carried tool for it (wearing it down), then picks up "
-                        + "the drop. Without a suitable tool some blocks (stone, ores) drop nothing. For a quantity use gather.",
+                        + "the drop. Without a suitable tool some blocks (stone, ores) drop nothing. For a quantity use gather." + DOORS,
                 params(req("target", str("Block name like \"oak_log\" or coordinates \"x y z\".")), null),
                 (a, call) -> new Body(new MineBlockAction(call, s(a, "target"))));
         action("gather", "Collect a quantity of a resource: mines exposed matching blocks you can see nearby (24 blocks), or hunts the "
                         + "animal that drops it, and picks up the drops. Resource words: wood, stone, ore, coal, iron, copper, gold, "
                         + "diamond, redstone, lapis, emerald, any block name (sand, dirt, gravel…), beef, leather, porkchop, mutton, wool, "
                         + "chicken, feather. Uses your best carried tool. Stone and ores drop nothing without a pickaxe of the right tier; "
-                        + "it does not craft tools for you. The result reports how many arrived in your inventory.",
+                        + "it does not craft tools for you. The result reports how many arrived in your inventory." + DOORS,
                 params(req("resource", str("What to gather.")), req("amount", intRange("How many items you want (1-64).", 1, 64))),
                 (a, call) -> new Body(new GatherAction(call, s(a, "resource"), i(a, "amount", 8))));
         action("dig", "Dig a straight shaft down under your feet, or a two-block-high tunnel forward in the direction you face. "
                         + "Stops before lava, water, big drops and missing floor. Down defaults to 10 blocks (max 64), forward to 8 (max 24).",
                 params(req("direction", enumOf("Which way.", "down", "forward")), opt("distance", intRange("Blocks to dig.", 1, 64))),
                 (a, call) -> new Body(new DigAction(call, s(a, "direction"), i(a, "distance", 0))));
-        action("collect", "Pick up dropped items within 16 blocks — no item picks up everything, an item name just that one. Needs free inventory space.",
+        action("collect", "Pick up dropped items within 16 blocks — no item picks up everything, an item name just that one. Needs free inventory space."
+                        + DOORS,
                 params(null, opt("item", str("Optional item name."))),
                 (a, call) -> new Body(new CollectAction(call, s(a, "item"))));
         action("craft", "Make an item from materials you carry, using the world's recipes. 2×2 recipes work anywhere; 3×3 recipes need a "
                         + "crafting table within 24 blocks — if there is none and you carry one, it is placed next to you first. Picks the "
                         + "most plentiful matching materials. The item stays in your inventory; use drop to hand it over. Ingots and cooked "
-                        + "food come from smelting, not crafting.",
+                        + "food come from smelting, not crafting." + DOORS,
                 params(req("item", str("Item to make, e.g. \"wooden_pickaxe\".")), opt("amount", intRange("How many items (default 1).", 1, 64))),
                 (a, call) -> new Body(new CraftAction(call, s(a, "item"), i(a, "amount", 1))));
         action("smelt", "Smelt or cook in a furnace within 24 blocks (if there is none and you carry one, it is placed next to you): "
                         + "puts the input and the fuel you name into it, waits next to it and takes the results (about 10 s per item). "
                         + "item may be the input (raw_iron, beef, sand…) or the wanted output (iron_ingot, cooked_beef, glass…). "
                         + "Without amount it smelts all you carry of the input, up to 64. If you leave early, the rest stays in the furnace; "
-                        + "collect_furnace takes it out later.",
+                        + "collect_furnace takes it out later." + DOORS,
                 params(req("item", str("Input or output item.")), opt("amount", intRange("How many to smelt.", 1, 64)),
                         opt("fuel", str("Which carried fuel to burn, e.g. coal, charcoal, oak_planks; needed when you carry more than one kind."))),
                 (a, call) -> new Body(new SmeltAction(call, s(a, "item"), i(a, "amount", 0), s(a, "fuel"))));
-        action("collect_furnace", "Take finished items out of the nearest furnace that has some, or the one at the given coordinates.",
+        action("collect_furnace", "Take finished items out of the nearest furnace that has some, or the one at the given coordinates." + DOORS,
                 params(null, opt("pos", str("\"x y z\" of a furnace."))),
                 (a, call) -> new Body(new CollectFurnaceAction(call, s(a, "pos"))));
         action("use_chest", "Open the nearest chest or barrel within 24 blocks (or one at given coordinates): view its contents, "
-                        + "store items from your inventory, or retrieve items from it.",
+                        + "store items from your inventory, or retrieve items from it." + DOORS,
                 params(req("action", enumOf("What to do.", "view", "store", "retrieve")), opt("item", str("Item name; needed for store and retrieve.")),
                         opt("count", intRange("How many; -1 for all (default 1).", -1, 2304)), opt("pos", str("\"x y z\" of the chest."))),
                 (a, call) -> new Body(new ChestAction(call, s(a, "action"), s(a, "item"), i(a, "count", 1), s(a, "pos"))));
+        action("use_block", "Right-click one block with what your main hand holds, as a player does: walks (never digs) to where you "
+                        + "see it within reach, looks at it and uses it. Doors, trapdoors and fence gates open or close, levers and buttons "
+                        + "switch, note blocks, repeaters and comparators change their setting, bells ring; iron doors and iron trapdoors "
+                        + "do not react to a hand. Where the block itself does not react, the held item acts on it (a carried block is "
+                        + "placed against it, a hoe tills). A screen the block opens (chest, crafting table, furnace…) is closed again at "
+                        + "once and a bed is left again at once; use_chest, craft, smelt and sleep handle those. The result reports the "
+                        + "block state before and after, e.g. open false -> true." + DOORS,
+                params(req("x", integer("X coordinate of the block.")), req("y", intRange("Y coordinate of the block.", -64, 320)),
+                        req("z", integer("Z coordinate of the block."))),
+                (a, call) -> new Body(new com.voxelmind.local.action.UseBlockAction(call,
+                        new net.minecraft.core.BlockPos(a.get("x").getAsInt(), a.get("y").getAsInt(), a.get("z").getAsInt()))));
         action("attack", "Fight a creature or player with whatever you hold (equip a weapon first if you want one). Against a hostile mob "
-                        + "the fight continues with the next hostile within 5 blocks until none is left; a player or animal stays a single target.",
+                        + "the fight continues with the next hostile within 5 blocks until none is left; a player or animal stays a single target."
+                        + DOORS,
                 params(req("target", str("Entity id like \"#120\", a creature name like \"zombie\" (nearest), or a player name.")), null),
                 (a, call) -> new Body(new AttackAction(call, s(a, "target"))));
         action("eat", "Eat one piece of a food you carry. Most food can only be eaten when not full. The result reports food and HP before and after.",
@@ -134,25 +151,25 @@ public final class Tools {
                 (a, call) -> new Body(new EquipAction(call, s(a, "item"))));
         action("drop", "Throw items out of your inventory — toward a player when you name one (walking close first), otherwise onto the "
                         + "ground. Items thrown to a player can only be picked up by that player. The result reports how many left your inventory; "
-                        + "it does not confirm that they picked them up.",
+                        + "it does not confirm that they picked them up." + DOORS,
                 params(req("item", str("Item name.")), opt("count", intRange("How many; -1 for all you carry (default 1).", -1, 2304)),
                         opt("target", str("Player name, \"owner\", or \"here\"."))),
                 (a, call) -> new Body(new DropAction(call, s(a, "item"), i(a, "count", 1), s(a, "target"))));
         action("place_block", "Place one carried block at coordinates, in the cell in front of you, or under your feet (you jump and "
                         + "place it beneath you, which builds a pillar step). It needs a solid neighbour to place against and does not "
-                        + "clear an occupied cell.",
+                        + "clear an occupied cell." + DOORS,
                 params(req("block", str("Block item name, e.g. \"cobblestone\".")), req("pos", str("\"x y z\", \"in_front\" or \"under_feet\"."))),
                 (a, call) -> new Body(new PlaceBlockAction(call, s(a, "block"), s(a, "pos"))));
         action("place_blocks", "Build: place up to 128 carried blocks at the given coordinates, lowest first, walking into reach as "
                         + "needed (routes may dig through natural terrain but never through the build or its block types). Coordinates are where each block goes: on ground whose "
                         + "top block is at height h, the first layer is y=h+1 (survey shows ground heights). Cells that are occupied, have no "
                         + "solid neighbour yet, or whose block you run out of are skipped; a second pass retries cells that gained support. "
-                        + "The result reports how many were placed and which were skipped.",
+                        + "The result reports how many were placed and which were skipped." + DOORS,
                 blocksParams(),
                 (a, call) -> new Body(new PlaceBlocksAction(call, entries(a))));
         action("build_shelter", "Build a 5×5 hut: walls two blocks high, a two-block door gap facing your owner, and a flat roof — "
                         + "about 55 blocks of one carried material (planks, cobblestone, dirt…). Walls reach down to the ground where it dips. "
-                        + "Without center it is built about 4 blocks in front of you. Takes a while; the result reports what was placed.",
+                        + "Without center it is built about 4 blocks in front of you. Takes a while; the result reports what was placed." + DOORS,
                 params(opt("material", str("Block to build with; needed when you carry more than one suitable kind.")),
                         opt("center", str("\"x z\" of the hut's middle."))),
                 (a, call) -> new Body(new BuildShelterAction(call, s(a, "material"), s(a, "center"))));
@@ -162,7 +179,7 @@ public final class Tools {
                 params(opt("center", str("\"x z\", \"x y z\" or \"here\" (default).")), opt("radius", intRange("Blocks around the center.", 1, 8))),
                 (a, call) -> new Body(new SurveyAction(call, s(a, "center"), i(a, "radius", 5))));
         action("sleep", "Walk to the nearest bed within 24 blocks and lie down; you stay in bed until morning or until another action. "
-                        + "Only works at night or in a thunderstorm and with no monsters close.",
+                        + "Only works at night or in a thunderstorm and with no monsters close." + DOORS,
                 params(null, null),
                 (a, call) -> new Body(new SleepAction(call)));
         action("stop", "Stop the current body action and stand still.",

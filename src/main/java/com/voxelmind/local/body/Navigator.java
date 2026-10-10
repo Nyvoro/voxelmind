@@ -1,21 +1,38 @@
 package com.voxelmind.local.body;
 
 import com.voxelmind.local.compat.Compat;
+import com.voxelmind.local.world.Names;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 /**
  * Walks the body along {@link PathFinder} paths. When no walking route exists it
  * plans through natural terrain, mines the cells in the way and builds pillar
  * steps with carried blocks. Re-plans when stuck or when a partial path runs out.
+ * Closed doors and fence gates on the way that open by hand are opened like a
+ * player opens them, and closed again once the body is past them.
  */
 public final class Navigator {
     public enum Status { IDLE, MOVING, ARRIVED, FAILED }
@@ -25,6 +42,17 @@ public final class Navigator {
     private static final int MAX_LEGS = 12;
     private static final int MAX_REPLANS = 6;
     private static final double DIG_RANGE = 64;
+    /** A door the body opened is closed again once the body is this many blocks past it. */
+    private static final double PAST_DOOR = 2.0;
+    private static final int MAX_DOOR_CLICKS = 3;
+    /** Right behind a doorway the body walks this close to the next cell's centre, clear of the door it closes behind it. */
+    private static final double BEHIND_DOOR = 0.15;
+    /**
+     * Doors (their lower cell) and gates each body opened and has not closed again, by body. They outlive one walk: a
+     * door the body still stood in when an action ended is closed on a later walk, once the body is past it; one the
+     * body is out of reach of is forgotten.
+     */
+    private static final Map<UUID, List<GlobalPos>> OPENED = new HashMap<>();
     /**
      * A search that found no route is not repeated for the same start and target within this many ticks: callers
      * that follow or chase re-plan every tick, and a failed search (walk plus dig budget) costs a large part of a
@@ -57,6 +85,9 @@ public final class Navigator {
     private @Nullable BlockPos noRouteFrom;
     private @Nullable BlockPos noRouteTo;
     private long noRouteAt;
+    private @Nullable BlockPos opening;
+    private int openTicks;
+    private int openClicks;
 
     public Navigator(CompanionPlayer body) {
         this.body = body;
@@ -120,6 +151,7 @@ public final class Navigator {
         BlockPos start = feet();
         breaker = null;
         pillarJumped = false;
+        opening = null;
         if (goal.test(start)) return arrive();
         PathFinder.Result result = PathFinder.find(level, start, target, goal, NODE_BUDGET);
         if (!result.reachesGoal() && allowDig && Math.sqrt(start.distSqr(target)) <= DIG_RANGE) {
@@ -142,14 +174,17 @@ public final class Navigator {
         return status;
     }
 
+    /** Ends the walk; doors and gates the body opened and has left are closed again. */
     public void stop() {
         path = null;
         breaker = null;
+        opening = null;
         status = Status.IDLE;
         body.motor.forward = 0;
         body.motor.strafe = 0;
         body.motor.jump = false;
         body.motor.sprint = false;
+        closeDoors(true);
     }
 
     public Status tick() {
@@ -157,6 +192,7 @@ public final class Navigator {
         ServerLevel level = Compat.level(body);
         CompanionPlayer.Motor motor = body.motor;
         Vec3 pos = body.position();
+        closeDoors(false);
 
         while (index < path.size()) {
             BlockPos node = path.get(index);
@@ -167,7 +203,8 @@ public final class Navigator {
             // A pillar step only counts once the body stands on the new block, not at the top of the jump.
             boolean pillarStep = node.getX() == before.getX() && node.getZ() == before.getZ() && node.getY() > before.getY();
             if (pillarStep && !(body.onGround() && feet().getY() >= node.getY())) break;
-            if (dx * dx + dz * dz < 0.35 * 0.35 && sameLevel) {
+            double near = PathFinder.isDoorway(level, before) ? BEHIND_DOOR : 0.35;
+            if (dx * dx + dz * dz < near * near && sameLevel) {
                 index++;
                 pillarJumped = false;
             } else {
@@ -184,8 +221,12 @@ public final class Navigator {
         BlockPos node = path.get(index);
         BlockPos prev = path.get(index - 1);
 
+        // A closed door or gate on this step is opened by hand first.
+        BlockPos door = closedDoor(level, prev, node);
+        if (door != null) return open(level, door);
+
         // Clear the cells this step passes through.
-        for (BlockPos cell : cellsToClear(prev, node)) {
+        for (BlockPos cell : cellsToClear(level, prev, node)) {
             if (PathFinder.passable(level, cell)) continue;
             if (!Hands.isNaturalTerrain(level.getBlockState(cell)) || !Hands.dryToBreak(level, cell) || (protect != null && protect.test(cell))
                     || com.voxelmind.local.world.Placed.isPlaced(level, cell)) {
@@ -289,6 +330,110 @@ public final class Navigator {
             if (++replans > MAX_REPLANS * 2) return fail("could not build up at " + fmt(prev));
         }
         return status;
+    }
+
+    /**
+     * A closed door or gate the body opens by hand in the cells it is about to step into, or in the doorway it still
+     * stands in; the upper half of a door first, at eye height.
+     */
+    private @Nullable BlockPos closedDoor(ServerLevel level, BlockPos prev, BlockPos node) {
+        BlockPos[] cells = prev.equals(feet()) ? new BlockPos[]{node.above(), node, prev.above(), prev} : new BlockPos[]{node.above(), node};
+        for (BlockPos cell : cells) {
+            if (PathFinder.opensByHand(level.getBlockState(cell))) return cell;
+        }
+        return null;
+    }
+
+    /** Opens a closed door or gate like a player: turn to it, right-click it, and step on once it shows open. */
+    private Status open(ServerLevel level, BlockPos door) {
+        CompanionPlayer.Motor motor = body.motor;
+        motor.forward = 0;
+        motor.strafe = 0;
+        motor.jump = false;
+        ticksSinceCheck = 0;
+        checkpoint = body.position();
+        if (!door.equals(opening)) {
+            opening = door;
+            openTicks = 0;
+            openClicks = 0;
+        }
+        BlockHitResult hit = Hands.aim(body, level, door);
+        Hands.lookAt(body, hit.getLocation());
+        if (!Hands.facing(body, hit.getLocation()) && ++openTicks < 10) return status;
+        BlockState state = level.getBlockState(door);
+        BlockPos base = base(state, door);
+        if (openClicks++ >= MAX_DOOR_CLICKS || !Hands.inReach(body, door)) {
+            return fail("could not open " + Names.id(state.getBlock()) + " at " + Names.pos(base));
+        }
+        Hands.use(body, level, hit);
+        if (!PathFinder.opensByHand(level.getBlockState(door))) {
+            GlobalPos opened = GlobalPos.of(level.dimension(), base);
+            List<GlobalPos> doors = OPENED.computeIfAbsent(body.getUUID(), id -> new ArrayList<>());
+            if (!doors.contains(opened)) doors.add(opened);
+            opening = null;
+            // The bump against the closed door is no step to jump up.
+            jumpCooldown = 4;
+        }
+        return status;
+    }
+
+    /**
+     * Closes the doors and gates this body opened, as they were found: once it is PAST_DOOR blocks past one, or, when a
+     * walk ends, once it has stepped out of the doorway and is clear of where the closed door stands; never while someone
+     * else stands in the door's cells. One out of reach, or in another dimension, is forgotten and stays as it is; that is
+     * checked before its block is read, so a remembered door far away never loads its chunk.
+     */
+    private void closeDoors(boolean walkEnded) {
+        List<GlobalPos> doors = OPENED.get(body.getUUID());
+        if (doors == null || body.isDeadOrDying() || body.isRemoved()) return;
+        ServerLevel level = Compat.level(body);
+        for (Iterator<GlobalPos> it = doors.iterator(); it.hasNext(); ) {
+            GlobalPos entry = it.next();
+            BlockPos door = entry.pos();
+            if (!entry.dimension().equals(level.dimension()) || !Hands.inReach(body, door)) {
+                it.remove();
+                continue;
+            }
+            BlockState state = level.getBlockState(door);
+            boolean isDoor = state.getBlock() instanceof DoorBlock;
+            if (!(isDoor || state.getBlock() instanceof FenceGateBlock) || !state.getValue(BlockStateProperties.OPEN)) {
+                it.remove();    // closed by someone else, or gone: nothing to restore
+                continue;
+            }
+            AABB closed = state.setValue(BlockStateProperties.OPEN, false).getCollisionShape(level, door).bounds().move(door);
+            if (isDoor) closed = closed.expandTowards(0, 1, 0);
+            // The closed panel stands at the edge of the door's cell, where it can miss a body still standing in the doorway.
+            BlockPos at = feet();
+            boolean inDoorway = isDoor && (at.equals(door) || at.equals(door.above()));
+            boolean past = walkEnded ? !inDoorway && !body.getBoundingBox().intersects(closed)
+                    : body.position().distanceToSqr(Vec3.atBottomCenterOf(door)) >= PAST_DOOR * PAST_DOOR;
+            if (!past) continue;
+            AABB cells = isDoor ? new AABB(door).expandTowards(0, 1, 0) : new AABB(door);
+            if (!level.getEntitiesOfClass(LivingEntity.class, cells, e -> e != body && e.isAlive() && !e.isSpectator()).isEmpty()) continue;
+            Hands.use(body, level, Hands.aim(body, level, isDoor ? door.above() : door));
+            it.remove();
+        }
+        if (doors.isEmpty()) OPENED.remove(body.getUUID());
+    }
+
+    /** The body uses the door or gate at {@code pos} on purpose now: walking no longer closes it for the body. */
+    public static void forget(CompanionPlayer body, ServerLevel level, BlockPos pos) {
+        List<GlobalPos> doors = OPENED.get(body.getUUID());
+        if (doors == null) return;
+        doors.remove(GlobalPos.of(level.dimension(), base(level.getBlockState(pos), pos)));
+        if (doors.isEmpty()) OPENED.remove(body.getUUID());
+    }
+
+    /** The cell a door or gate is remembered by: the lower half of a door. */
+    private static BlockPos base(BlockState state, BlockPos pos) {
+        return state.getBlock() instanceof DoorBlock && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER ? pos.below() : pos;
+    }
+
+    /** Cells the body mines open to move from {@code prev} to {@code node}; doorways on the step are walked through instead. */
+    static List<BlockPos> cellsToClear(Level level, BlockPos prev, BlockPos node) {
+        List<BlockPos> cells = cellsToClear(prev, node);
+        cells.removeIf(cell -> PathFinder.isDoorway(level, cell));
+        return cells;
     }
 
     /** Cells that must be open for the body to move from {@code prev} to {@code node}. */
