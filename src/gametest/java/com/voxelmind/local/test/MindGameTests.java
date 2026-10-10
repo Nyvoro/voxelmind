@@ -674,6 +674,23 @@ public class MindGameTests {
         });
     }
 
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aStopThatEndsAnActionLeadsToTheNextDecision(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion(call("stop", "say", "Stopping here.")), completion(call("say", "text", "All still now.")));
+        Hold hold = new Hold();
+        c.startAction(hold);
+        c.hear(owner.getGameProfile().name(), true, "Stop, please.", "public");
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(hold.finished(), "the running action was stopped");
+            helper.assertTrue(requests(c) == 2, "the stopped action woke the next decision, got " + requests(c));
+            helper.assertTrue(sent(c, "All still now.") != null, "the next decision was carried out");
+            helper.assertTrue(PROMPTS.get(c.name()).get(1).contains("You last spoke "), "the next prompt says when the companion last spoke");
+        });
+    }
+
     // ---- conversation window ----
 
     private static Timeline.Event at(Timeline.Event e, long epochMs) {

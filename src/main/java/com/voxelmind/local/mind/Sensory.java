@@ -79,6 +79,7 @@ public final class Sensory {
         if (body.getAirSupply() < body.getMaxAirSupply()) out.append("  Air ").append(Math.max(0, body.getAirSupply() / 30)).append("/10");
         if (body.isSleeping()) out.append("  [sleeping]");
         out.append('\n');
+        out.append(waterLine(level, body.blockPosition()));
 
         BlockPos feet = body.blockPosition();
         String biome = level.getBiome(feet).unwrapKey().map(k -> k.identifier().getPath()).orElse("unknown");
@@ -333,6 +334,20 @@ public final class Sensory {
                     .append(placedNote(level, highest));
         }
         return line.append(".\n").toString();
+    }
+
+    /** With the head in water: where the water above it ends, and whether air or a block comes next. */
+    private static String waterLine(ServerLevel level, BlockPos feet) {
+        BlockPos head = feet.above();
+        if (!level.getFluidState(head).is(FluidTags.WATER)) return "";
+        BlockPos.MutableBlockPos cursor = head.mutable();
+        int limit = head.getY() + 48;
+        while (cursor.getY() < limit && level.getFluidState(cursor).is(FluidTags.WATER)) cursor.move(Direction.UP);
+        if (level.getFluidState(cursor).is(FluidTags.WATER)) return "Head under water: the water goes on above y=" + limit + ".\n";
+        BlockState next = level.getBlockState(cursor);
+        int surface = cursor.getY() - 1;
+        return "Head under water: the water above you ends at y=" + surface + " (" + (surface - head.getY()) + " up); above it is "
+                + (next.isAir() ? "air" : Names.id(next.getBlock()) + placedNote(level, cursor)) + " at y=" + cursor.getY() + ".\n";
     }
 
     /** " (placed by NAME)" when a player placed the block at {@code pos}. */

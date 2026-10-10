@@ -69,8 +69,13 @@ public final class PromptBuilder {
         out.append(PromptTexts.BODY_INTERFACE).append('\n');
         long now = System.currentTimeMillis();
         Timeline.Event lastHuman = null;
-        for (Timeline.Event e : s.timeline.last(Timeline.KEEP)) if (e.kind.equals("chat_in") || e.kind.equals("whisper_in")) lastHuman = e;
-        out.append("CLOCK: ").append(lastHuman == null ? "No human has spoken to you in this memory window." : "You last heard from someone " + Timeline.age(now - lastHuman.epochMs) + ".").append('\n');
+        Timeline.Event lastOwn = null;
+        for (Timeline.Event e : s.timeline.last(Timeline.KEEP)) {
+            if (e.kind.equals("chat_in") || e.kind.equals("whisper_in")) lastHuman = e;
+            if (e.kind.equals("chat_out") || e.kind.equals("said")) lastOwn = e;
+        }
+        out.append("CLOCK: ").append(lastHuman == null ? "No human has spoken to you in this memory window." : "You last heard from someone " + Timeline.age(now - lastHuman.epochMs) + ".")
+                .append(lastOwn == null ? "" : " You last spoke " + Timeline.age(now - lastOwn.epochMs) + ".").append('\n');
         Companion.LastAction last = c.lastAction();
         List<Timeline.Row> window = window(s.timeline, now);
         if (last != null && now - last.at() <= LAST_ACTION_WINDOW_MS) {

@@ -168,7 +168,8 @@ public final class Companion implements CompanionPlayer.BodyListener {
         recordIfFinished();
         if (current != null && !current.finished()) {
             current.preempt("stopped by " + call);
-            record(false);
+            // The stopped action ended like any other: its result is a new fact the next decision starts from.
+            record(true);
             event("result", call + ": stopped; standing at " + Names.pos(body.blockPosition()), false, "done");
         } else {
             if (body != null) body.motor.clear();

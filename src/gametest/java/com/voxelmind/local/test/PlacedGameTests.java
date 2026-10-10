@@ -346,6 +346,27 @@ public class PlacedGameTests {
         });
     }
 
+    @GameTest(maxTicks = 100, skyAccess = true)
+    public void sensoryStatesWhereTheWaterAboveTheHeadEnds(GameTestHelper helper) {
+        floor(helper);
+        // A one-wide water shaft from y=1 to y=4 in stone, open sky above it.
+        for (int y = 1; y <= 4; y++) {
+            for (BlockPos side : new BlockPos[]{new BlockPos(2, y, 3), new BlockPos(4, y, 3), new BlockPos(3, y, 2), new BlockPos(3, y, 4)}) {
+                natural(helper, side, Blocks.STONE.defaultBlockState());
+            }
+            helper.setBlock(new BlockPos(3, y, 3), Blocks.WATER);
+        }
+        CompanionPlayer body = spawn(helper, new BlockPos(3, 1, 3));
+        int surface = helper.absolutePos(new BlockPos(3, 4, 3)).getY();
+        finishWhen(helper, body, () -> {
+            int head = body.blockPosition().getY() + 1;
+            helper.assertTrue(head <= surface, "the head is still under water: head y=" + head);
+            String text = Sensory.render(body, UUID.randomUUID(), "Owner", "", "");
+            helper.assertTrue(text.contains("Head under water: the water above you ends at y=" + surface + " (" + (surface - head)
+                    + " up); above it is air at y=" + (surface + 1) + ".\n"), text);
+        });
+    }
+
     private static Placed.Entry planksOf(Placed index) {
         return index.entry(Level.OVERWORLD, new BlockPos(10, 64, -5));
     }
