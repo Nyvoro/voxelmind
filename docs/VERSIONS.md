@@ -34,14 +34,14 @@ The Fabric API / loader versions are the ones of `voxelmind-mod/versions/*/gradl
 (Minecraft 1.21 uses the Fabric API build `0.116.12+1.21.1`, which also runs on 1.21). The mod is
 "client and server": it runs in the integrated or a dedicated server, so dedicated servers need Fabric API too.
 
-Verification status of 0.4.1 (09.10.2026; details below):
+Verification status of 0.4.2 (10.10.2026; details below):
 
 | Check | 1.21 .. 1.21.10 | 1.21.11 | 26.1, 26.1.1, 26.1.2 | 26.2 |
 |---|---|---|---|---|
 | Release jar builds, metadata checked (`tools/build-all.sh`) | yes | yes | yes | yes |
-| Production dedicated-server boot, remapped jar (`tools/smoke-servers.sh`) | yes | yes | yes | yes |
-| Client smoke: every screen, real body actions, summon after the owner went 300 blocks away (`tools/smoke-client.sh`) | 1.21.1 and 1.21.8 run for 0.4.1 (all in 0.4.0) | yes | 0.4.0 only | yes |
-| 38 server game tests (`runGameTest`) | not available | yes | 0.4.0 only (36 then) | yes |
+| Production dedicated-server boot, remapped jar, all five mixins (`tools/smoke-servers.sh`) | yes | yes | yes | yes |
+| Client smoke: every screen, real body actions, summon after the owner went 300 blocks away (`tools/smoke-client.sh`) | 1.21.1 and 1.21.8 | yes | 0.4.0 only | yes |
+| 106 server game tests (`runGameTest`) | not available | yes | 26.1.2 with 48 of them during the review | yes |
 | Long client game test (`runClientGameTest`) | not available | not available | not available | yes |
 
 ## Build commands
@@ -62,7 +62,7 @@ export GRADLE_USER_HOME=V:/Android/Gradle
 bash tools/build-all.sh                      # or: bash tools/build-all.sh 1.21.1 26.2
 
 # 26.2 tests (26.2 is the default active project)
-./gradlew :26.2:runGameTest                  # 38 server game tests
+./gradlew :26.2:runGameTest                  # 106 server game tests
 ./gradlew :26.2:runClientGameTest            # the long client test with screenshots
 ./gradlew :26.2:runServer                    # dev server in voxelmind-local/run (port 25599, owner-bot scenarios)
 ./gradlew :26.2:build                        # jar + game tests
@@ -120,7 +120,7 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
 | `client/VoxelMindSignIn.java`, `client/VoxelMindLocalClient.java` and the many plain renames | session service (`mc.services()` from 1.21.9), key mapping category (a `Category` object from 1.21.9, a string before), `Screens.getWidgets/getButtons`, `sendSystemMessage` |
 | `src/main/resources/fabric.mod.json`, `build.gradle` | `depends.minecraft` = exact target version, Java and loader minimum per target, Loom plugin id (`fabric-loom` for 1.21.x with Mojang mappings and a `jspecify` compile-only dependency, `net.fabricmc.fabric-loom` for the unobfuscated 26.x) |
 | `versions/<mc>/gradle.properties` | `minecraft_version`, `fabric_version`, `loader_version`, `java_version` |
-| `src/main/resources/voxelmind_local.mixins.json`, `mixin/*.java` | no per-version code: the two mixins (`PlayerList.respawn`, `SleepStatus.update`) apply unchanged on all 16 targets; Loom remaps the annotation strings for 1.21.x |
+| `src/main/resources/voxelmind_local.mixins.json`, `mixin/*.java` | no per-version code: the five mixins (`PlayerList.respawn`, `SleepStatus.update`, `BlockItem.place` with MixinExtras `@ModifyExpressionValue`/`@Share`, `ServerPlayerGameMode.useItemOn` for right-click conversions, `PistonBaseBlock.moveBlocks`) apply unchanged on all 16 targets; Loom remaps the annotation strings for 1.21.x, and the production server boot (`tools/smoke-servers.sh`) proves the remapped targets |
 | `src/gametest` | game tests only run on 1.21.11 and the 26.x targets (see below); the long client test only on 26.2 |
 
 ## Tests and what they prove
@@ -138,7 +138,7 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
   The `VML-SMOKE body ...` lines are written to `build/client-smoke/<mc>/smoke-lines.txt`; apart from coordinates they are
   identical on all 16 versions. A render error would crash the client and fail the run. With `SMOKE_SHOTS=1` it also photographs
   each screen for visual comparison against 26.2.
-- **26.2 game tests**: `runGameTest` (38 server tests: body, tools, settings, hosted minds) and `runClientGameTest`
+- **26.2 game tests**: `runGameTest` (106 server tests: body, tools, settings, hosted minds, one mind against a stub endpoint, doors, placed blocks) and `runClientGameTest`
   (one long client test with screenshots) - must stay green; they also run for 1.21.11 and 26.1 / 26.1.1 / 26.1.2
   (server tests). Older targets differ in `GameTestHelper` (Component messages instead of Strings from 1.21.11) and, below
   1.21.5, in how tests are registered; the client smoke covers the same body actions there.
