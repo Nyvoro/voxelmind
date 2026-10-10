@@ -30,7 +30,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiFunction;
 
 /**
@@ -41,7 +40,7 @@ public final class Tools {
     private Tools() {}
 
     /** What a tool call turns into. */
-    public sealed interface Choice permits Body, Stop, Wait, Keep, Say, Silent, Invalid {}
+    public sealed interface Choice permits Body, Stop, Wait, Keep, Say, Invalid {}
 
     public record Body(BodyAction action) implements Choice {}
 
@@ -53,15 +52,12 @@ public final class Tools {
 
     public record Say(String text, String mode, String target) implements Choice {}
 
-    public record Silent() implements Choice {}
-
     public record Invalid(String call, String reason) implements Choice {}
 
     private record Spec(String name, String description, JsonObject parameters, BiFunction<JsonObject, String, Choice> factory) {}
 
     private static final Map<String, Spec> ACTION = new LinkedHashMap<>();
     private static final Map<String, Spec> SPEECH = new LinkedHashMap<>();
-    public static final Set<String> SPEECH_NAMES = Set.of("say", "stay_silent");
 
     static {
         action("go_to", "Walk to a target: a player name, \"owner\", an entity id like \"#57\", coordinates \"x y z\", a compass direction "
@@ -178,9 +174,6 @@ public final class Tools {
                         opt("mode", enumOf("say: players within 48 blocks hear it; whisper: only the target; yell: everyone online.", "say", "whisper", "yell")),
                         opt("target", str("Player name; required for whisper."))),
                 (a, call) -> new Say(s(a, "text"), s(a, "mode").isEmpty() ? "say" : s(a, "mode"), s(a, "target")));
-        speech("stay_silent", "Choose to say nothing this turn.",
-                params(null, null),
-                (a, call) -> new Silent());
     }
 
     private static void action(String name, String description, JsonObject parameters, BiFunction<JsonObject, String, Choice> factory) {
@@ -192,30 +185,18 @@ public final class Tools {
     }
 
     /**
-     * Action-lane tools; keep_current_action only while a body action runs, and last, so both variants share the
-     * same tool prefix for the provider's prompt cache.
+     * The tools of one decision: the body tools, say, and keep_current_action only while a body action runs. It comes
+     * last, so both variants share the same tool prefix for the provider's prompt cache.
      */
-    public static JsonArray actionTools(boolean bodyActionRunning) {
+    public static JsonArray decisionTools(boolean bodyActionRunning) {
         JsonArray out = new JsonArray();
         for (Spec spec : ACTION.values()) {
             if (spec.name().equals("keep_current_action")) continue;
             out.add(schema(spec));
         }
+        for (Spec spec : SPEECH.values()) out.add(schema(spec));
         if (bodyActionRunning) out.add(schema(ACTION.get("keep_current_action")));
         return out;
-    }
-
-    public static JsonArray speechTools() {
-        JsonArray out = new JsonArray();
-        for (Spec spec : SPEECH.values()) out.add(schema(spec));
-        return out;
-    }
-
-    /** Compact one-line-per-tool reference of the body interface, for the speech lane. */
-    public static String bodyReference() {
-        StringBuilder out = new StringBuilder();
-        for (Spec spec : ACTION.values()) out.append(schema(spec).getAsJsonObject("function")).append('\n');
-        return out.toString();
     }
 
     private static JsonObject schema(Spec spec) {
@@ -230,8 +211,8 @@ public final class Tools {
     }
 
     /** Turns one model tool call into a choice; never throws. */
-    public static Choice parse(String name, @Nullable JsonObject args, boolean speechLane) {
-        Spec spec = (speechLane ? SPEECH : ACTION).get(name);
+    public static Choice parse(String name, @Nullable JsonObject args) {
+        Spec spec = ACTION.containsKey(name) ? ACTION.get(name) : SPEECH.get(name);
         String call = callText(name, args);
         if (spec == null) return new Invalid(call, "unknown tool '" + name + "' for this decision");
         if (args == null) return new Invalid(call, "arguments were not valid JSON");
