@@ -410,14 +410,14 @@ public class PlacedGameTests {
         }
         helper.setBlock(new BlockPos(6, 4, 5), Blocks.WATER);
         BlockPos start = helper.absolutePos(new BlockPos(1, 1, 1));
-        // The swimming spot at the top of the shaft, head in the open air; and a spot one breath into the serpentine.
+        // The swimming spot at the top of the shaft, head in the open air; and a spot half a breath into the serpentine.
         BlockPos target = helper.absolutePos(new BlockPos(6, 4, 5));
-        BlockPos near = helper.absolutePos(new BlockPos(6, 1, 3));
+        BlockPos near = helper.absolutePos(new BlockPos(5, 1, 1));
         helper.succeedWhen(() -> {
             PathFinder.Result far = PathFinder.find(helper.getLevel(), start, target, p -> p.equals(target), 20_000);
             helper.assertFalse(far.reachesGoal(), "a route dives the whole serpentine: " + far.path());
             PathFinder.Result close = PathFinder.find(helper.getLevel(), start, near, p -> p.equals(near), 20_000);
-            helper.assertTrue(close.reachesGoal(), "a short dive within one breath has no route");
+            helper.assertTrue(close.reachesGoal(), "a short dive within half a breath has no route");
         });
     }
 

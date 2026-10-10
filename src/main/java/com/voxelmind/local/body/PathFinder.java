@@ -38,10 +38,11 @@ public final class PathFinder {
     private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
     public static final int MAX_DROP = 3;
     /**
-     * Steps in a row with the head under water that a route may take: a body holds its breath about 15 seconds, so a
-     * longer dive drowns it on the way, the way a fall of more than MAX_DROP hurts it.
+     * Steps in a row with the head under water that a route may take: a body holds its breath about 15 seconds, and a
+     * route that ends under water must leave the way back within the same breath, so half of it. A longer dive drowns
+     * the body, the way a fall of more than MAX_DROP hurts it.
      */
-    public static final int MAX_UNDER_WATER = 12;
+    public static final int MAX_UNDER_WATER = 6;
     private static final double BLOCKED = Double.MAX_VALUE;
     /** Extra cost per closed door half or gate on a step: the body stops and opens it first. */
     private static final double CLOSED_DOOR = 1.0;
