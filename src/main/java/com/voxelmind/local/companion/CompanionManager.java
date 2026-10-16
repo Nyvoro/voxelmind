@@ -205,6 +205,12 @@ public final class CompanionManager {
                 || player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
     }
 
+    /** Who may change the AI settings, as for /vml setup: the singleplayer host or an owner-level operator. */
+    public boolean mayConfigure(ServerPlayer player) {
+        return server.isSingleplayerOwner(new NameAndId(player.getUUID(), player.getGameProfile().name()))
+                || player.permissions().hasPermission(Permissions.COMMANDS_OWNER);
+    }
+
     /** kind: companion, builder or god; null keeps an existing companion's kind (new ones become companions). */
     public String summon(ServerPlayer owner, String name, @Nullable String persona, @Nullable String kind) {
         if (!VALID_NAME.matcher(name).matches()) return "Names must be 3-16 letters, digits or underscores.";
@@ -512,6 +518,7 @@ public final class CompanionManager {
             }
             player.sendSystemMessage(message);
         }
+        com.voxelmind.local.provider.UsageStats.noticeOnce(player, mayConfigure(player));
         for (GodMind god : gods()) if (god.sees(player)) god.worldEvent(player.getGameProfile().name() + " joined the world", true);
         for (Companion c : ownedBy(player.getUUID())) {
             if (c.hosted != null) {

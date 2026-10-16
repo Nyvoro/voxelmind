@@ -28,6 +28,12 @@ public final class VoxelMindLocal implements ModInitializer {
     @Override
     public void onInitialize() {
         LocalConfig.load();
+        try {
+            // Own skin PNGs go here (/vml skin <name> <file.png>); made at start so players find it.
+            java.nio.file.Files.createDirectories(com.voxelmind.local.companion.Skins.folder());
+        } catch (java.io.IOException e) {
+            LOG.warn("Could not create {}", com.voxelmind.local.companion.Skins.folder(), e);
+        }
         com.voxelmind.local.net.MenuPayloads.register();
         com.voxelmind.local.net.Speech.register();
         com.voxelmind.local.hosted.HostedEvents.register();

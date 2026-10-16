@@ -37,7 +37,7 @@ Es gibt keinen VoxelMind-Server, kein Pflicht-Konto und keine Weltdaten bei der 
    - Karten mit Gesicht, Status (in der Welt / beschäftigt / weg / gefallen) und aktueller Tätigkeit.
    - Holen, Wegschicken, Bearbeiten, Monitor, Löschen (mit Rückfrage).
    - **+ Neuer Begleiter:** oben die Art wählen.
-     - **Begleiter:** Name, Skin eines beliebigen Minecraft-Accounts, Charakter aus sechs Vorlagen oder eigener Text.
+     - **Begleiter:** Name, Aussehen (Skin eines beliebigen Minecraft-Accounts, ein Link zu deinem eigenen Skin-PNG oder eine PNG aus `.minecraft/voxelmind-local/skins/`), Charakter aus sechs Vorlagen oder eigener Text.
      - **Builder:** Name, Gestalt (Hilfsgeist, Biene, Plagegeist, Papagei, Fledermaus), Charakter.
      - **God:** Name, Chaos 1–5, Kampagne (Sandbox, Prüfungen der Götter, Lebendige Welt, Chaos-Arena), Gäste sichtbar oder verborgen, Charakter.
      - Builder und God gibt es nur für den Host einer Einzelspielerwelt oder einen Operator.
@@ -63,7 +63,8 @@ Es gibt keinen VoxelMind-Server, kein Pflicht-Konto und keine Weltdaten bei der 
 | `/vml character <Name> <Text>` | Charakter neu beschreiben |
 | `/vml mode <Name> normal\|hardcore` | Modus setzen, solange er lebt; ein Hardcore-Tod ist endgültig |
 | `/vml worlds <Name> this\|all` | nur diese Welt oder mit dir in alle Welten |
-| `/vml skin <Name> <Minecraft-Account>` | Skin eines echten Accounts übernehmen, z. B. `/vml skin Lysa Notch` |
+| `/vml skin <Name> <Account, PNG-Link oder Datei.png> [slim]` | Skin eines echten Accounts übernehmen (`/vml skin Lysa Notch`) oder deinen eigenen: `/vml skin Lysa https://…/skin.png` oder eine PNG aus `.minecraft/voxelmind-local/skins/` (`/vml skin Lysa meinskin.png`). Eigene PNGs signiert MineSkin, damit alle sie sehen; schmale Arme werden erkannt, sonst ` slim` anhängen |
+| `/vml stats [on\|off]` | Anonyme Zählung (einmal am Tag: Art des KI-Dienstes, Mod- und Spielversion) anzeigen, ein- oder ausschalten |
 | `/vml list`, `/vml status` | Überblick, aktuelle Aktion, Modell, Key-Anfang, Guthaben (OpenRouter, Player2 oder Sparks) |
 | `/vml sparks` | Sparks-Stand, Link zu Paketen und Preisen, beim Host „[Account]“ (private Kontoseite) und „Token kopieren“ |
 | `/vml sparks redeem <Code>` | Sparks-Code für das angemeldete Konto einlösen (Host oder Operator) |

@@ -24,6 +24,8 @@ import java.util.regex.Pattern;
  */
 public final class CompanionEditScreen extends PanelScreen {
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
+    /** A Minecraft account, a PNG link or a .png from the skins folder, optionally followed by "slim" or "classic" (see Skins.resolve). */
+    private static final Pattern SKIN = Pattern.compile("(?i)([A-Za-z0-9_]{3,16}|https?://\\S{4,190}|[^/\\\\:*?\"<>|]{1,80}\\.png)( (slim|classic))?");
     private static final int MAX_PERSONA = 500;
     private static final String[] CHIPS = {"buddy", "jester", "explorer", "builder", "guardian", "quiet"};
     private static final String[] KINDS = {"companion", "builder", "god"};
@@ -103,7 +105,7 @@ public final class CompanionEditScreen extends PanelScreen {
         lookY = y;
         if (kind.equals("companion")) {
             EditBox skinBox = new EditBox(font, x + 24, y + 10, w - 24 - MODE_W - 6, 18, tr("skin"));
-            skinBox.setMaxLength(16);
+            skinBox.setMaxLength(200);
             skinBox.setHint(tr("skin.hint"));
             skinBox.setTooltip(net.minecraft.client.gui.components.Tooltip.create(tr("skin.tooltip")));
             skinBox.setValue(account);
@@ -360,7 +362,7 @@ public final class CompanionEditScreen extends PanelScreen {
     private void save() {
         String text = clean(persona, MAX_PERSONA);
         String skin = kind.equals("companion") ? account.trim() : "";
-        if (!skin.isEmpty() && !NAME.matcher(skin).matches()) {
+        if (!skin.isEmpty() && !SKIN.matcher(skin).matches()) {
             error = tr("error.skin");
             return;
         }

@@ -9,6 +9,7 @@
       "com.voxelmind.local.test.BodyGameTests",
       "com.voxelmind.local.test.DoorGameTests",
       "com.voxelmind.local.test.SettingsGameTests",
+      "com.voxelmind.local.test.SkinGameTests",
       "com.voxelmind.local.test.PlacedGameTests",
       "com.voxelmind.local.test.MindGameTests",
       "com.voxelmind.local.hosted.HostedGameTests"

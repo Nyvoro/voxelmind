@@ -91,9 +91,12 @@ public final class VmlCommand {
                                         .executes(VmlCommand::worlds))))
                 .then(Commands.literal("skin")
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .then(Commands.argument("account", StringArgumentType.word())
+                                .then(Commands.argument("account", StringArgumentType.greedyString())
                                         .executes(VmlCommand::skin))))
                 .then(Commands.literal("status").executes(VmlCommand::status))
+                .then(Commands.literal("stats").executes(ctx -> stats(ctx, null))
+                        .then(Commands.literal("on").requires(admin).executes(ctx -> stats(ctx, true)))
+                        .then(Commands.literal("off").requires(admin).executes(ctx -> stats(ctx, false))))
                 .then(Commands.literal("sparks").executes(VmlCommand::sparks)
                         .then(Commands.literal("redeem").requires(admin)
                                 .then(Commands.argument("code", StringArgumentType.greedyString()).executes(VmlCommand::redeem))))
@@ -256,7 +259,7 @@ public final class VmlCommand {
                 /vml campaign|chaos|guests <god> <value> · /vml body <builder> allay|bee|vex|parrot|bat
                 /vml dismiss [name]             send it away (it remembers you)
                 /vml character <name> <text>    describe its character
-                /vml skin <name> <account>      wear the skin of a Minecraft account
+                /vml skin <name> <account|PNG link|file.png> [slim]  a Minecraft account's skin or your own PNG
                 /vml mode <name> normal|hardcore  hardcore: one life, a death is final
                 /vml worlds <name> this|all     only this world, or with you into all your worlds
                 /vml list · /vml status · /vml sparks · /vml sparks redeem <code>
@@ -264,6 +267,7 @@ public final class VmlCommand {
                 /vml login · /vml key <key> · /vml models [search] · /vml model <id>
                 /vml player2                    free AI with a Player2 account (sign in with a code)
                 /vml endpoint openrouter|player2|voxelmind|ollama|lmstudio|<url> · /vml test · /vml reload
+                /vml stats [on|off]             anonymous daily count of which kind of AI service is used
                 /vml forget <name>              delete it and its memory
                 Talk to it in normal chat; it hears you within 48 blocks.""");
         ctx.getSource().sendSuccess(() -> link("voxelmind_local.help.feature_request", "[Feature request on Discord]", com.voxelmind.local.VoxelMindLocal.FEATURE_REQUEST_URL)
@@ -372,22 +376,51 @@ public final class VmlCommand {
     private static int skin(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
         String name = StringArgumentType.getString(ctx, "name");
-        String account = StringArgumentType.getString(ctx, "account");
+        String account = StringArgumentType.getString(ctx, "account").trim();
         Companion c = manager(ctx).find(owner.getUUID(), name);
         if (c == null) return fail(ctx, "You have no companion named " + name + ".");
-        info(ctx, "Looking up the skin of " + account + "…");
+        if (account.length() > 200) return fail(ctx, "That link is too long (at most 200 characters). Save the PNG in " + com.voxelmind.local.companion.Skins.folder() + " and use its file name.");
+        boolean own = account.contains("/") || account.toLowerCase(Locale.ROOT).contains(".png");
+        info(ctx, own ? "Preparing the skin and having it signed at MineSkin (a few seconds)…" : "Looking up the skin of " + account + "…");
         var server = ctx.getSource().getServer();
-        com.voxelmind.local.companion.Skins.fetch(account).whenComplete((skin, error) -> server.execute(() -> {
+        com.voxelmind.local.companion.Skins.resolve(account, manager(ctx).mayConfigure(owner)).whenComplete((skin, error) -> server.execute(() -> {
             if (error != null) {
-                Throwable cause = error.getCause() != null ? error.getCause() : error;
-                owner.sendSystemMessage(Component.literal("Could not load the skin of " + account + ": " + cause.getMessage()).withStyle(ChatFormatting.RED));
+                owner.sendSystemMessage(Component.literal("Could not set the skin: " + com.voxelmind.local.companion.Skins.explain(error)).withStyle(ChatFormatting.RED));
+                if (own && !account.contains("/")) owner.sendSystemMessage(skinsFolder());
                 return;
             }
             CompanionManager m = CompanionManager.get();
             if (m == null) return;
             m.applySkin(c, skin);
-            owner.sendSystemMessage(Component.literal(c.name() + " now wears the skin of " + skin.sourceName() + ".").withStyle(ChatFormatting.GREEN));
+            owner.sendSystemMessage(Component.literal(c.name() + (own ? " now wears your skin " : " now wears the skin of ") + skin.sourceName() + ".").withStyle(ChatFormatting.GREEN));
         }));
+        return 1;
+    }
+
+    /** Where own skin files go, with the path to copy. */
+    private static MutableComponent skinsFolder() {
+        String path = com.voxelmind.local.companion.Skins.folder().toAbsolutePath().toString();
+        return Component.literal("Skins folder: ").withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(path).withStyle(style -> style.withColor(ChatFormatting.AQUA).withUnderlined(true)
+                        .withClickEvent(new ClickEvent.CopyToClipboard(path))
+                        .withHoverEvent(new HoverEvent.ShowText(Component.literal("Copy the path")))));
+    }
+
+    /** /vml stats: whether the anonymous daily count is on; "on" and "off" change it for the whole installation. */
+    private static int stats(CommandContext<CommandSourceStack> ctx, Boolean on) {
+        LocalConfig config = LocalConfig.get();
+        if (on != null) {
+            config.usageStats = on;
+            config.usageStatsNoticed = true;
+            LocalConfig.save();
+        }
+        String kind = com.voxelmind.local.provider.UsageStats.kind(config);
+        if (config.usageStats) {
+            ok(ctx, "Anonymous usage count is on: once a day the kind of AI service (now: " + kind
+                    + ") and the mod and game version go to api.voxel-mind.com, with no name, ID or chat. /vml stats off turns it off.");
+        } else {
+            ok(ctx, "Anonymous usage count is off; nothing is sent. /vml stats on turns it back on.");
+        }
         return 1;
     }
 

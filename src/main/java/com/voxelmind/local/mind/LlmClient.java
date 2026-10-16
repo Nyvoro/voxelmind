@@ -97,6 +97,7 @@ public final class LlmClient {
                 .whenComplete((response, error) -> {
                     if (error == null) {
                         lastFailure = null;
+                        com.voxelmind.local.provider.UsageStats.used();
                         return;
                     }
                     Throwable cause = error.getCause() != null ? error.getCause() : error;

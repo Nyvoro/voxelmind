@@ -87,7 +87,7 @@
   "voxelmind_local.menu.name.hint": "Cae, Ember, Sprout… (3-16 letters, digits, _)",
   "voxelmind_local.menu.name.fixed": "the name holds its memories",
   "voxelmind_local.menu.skin": "Look",
-  "voxelmind_local.menu.skin.hint": "Player name (optional)",
+  "voxelmind_local.menu.skin.hint": "Player name, PNG link or file.png (optional)",
   "voxelmind_local.menu.skin.default": "default skin",
   "voxelmind_local.menu.skin.current": "now: %s",
   "voxelmind_local.menu.character": "Character",
@@ -108,7 +108,7 @@
   "voxelmind_local.menu.cancel": "Cancel",
   "voxelmind_local.menu.create": "Create & summon",
   "voxelmind_local.menu.save": "Save",
-  "voxelmind_local.menu.error.skin": "The look needs a Minecraft player name (3-16 letters, digits, _).",
+  "voxelmind_local.menu.error.skin": "The look needs a Minecraft player name (3-16 letters, digits, _), a PNG link (https://…) or a .png from .minecraft/voxelmind-local/skins, optionally followed by \"slim\".",
   "voxelmind_local.menu.error.name": "Names are 3-16 letters, digits or underscores.",
   "voxelmind_local.menu.error.exists": "You already have a companion named %s.",
   "voxelmind_local.menu.monitor.title": "Monitor",
@@ -169,7 +169,7 @@
   "voxelmind_local.settings.test.no_player2": "Connect Player2 first.",
   "voxelmind_local.settings.player2.client_id": "Player2 Client ID",
   "voxelmind_local.settings.player2.client_id.hint": "Player2 Client ID (developer dashboard → AI Mods)",
-  "voxelmind_local.menu.skin.tooltip": "Name of a Minecraft account whose skin it borrows, e.g. Notch. Empty keeps the default skin.",
+  "voxelmind_local.menu.skin.tooltip": "A Minecraft account whose skin it borrows (e.g. Notch), a link to your own skin PNG, or the name of a PNG you put in .minecraft/voxelmind-local/skins. Add \" slim\" for thin arms if it is not detected. Own PNGs are signed through MineSkin so everyone sees them. Empty keeps the default skin.",
   "voxelmind_local.notice.joules": "%s cannot think right now: your free Player2 AI power (joules) is used up. It recharges daily on its own; Player2 Patron gives more, or you switch to another AI.",
   "voxelmind_local.notice.joules.more": "[Player2 page]",
   "voxelmind_local.notice.joules.other": "[Choose another AI]",
@@ -250,5 +250,7 @@
   "voxelmind_local.help.feature_request": "[Feature request on Discord]",
   "voxelmind_local.help.support": "[♥ Support VoxelMind on Ko-fi]",
   "voxelmind_local.modmenu.feature_request": "Feature request",
-  "voxelmind_local.modmenu.support": "Support on Ko-fi"
+  "voxelmind_local.modmenu.support": "Support on Ko-fi",
+  "voxelmind_local.stats.notice": "So we can see which AI services players pick, the mod sends one anonymous count a day: the kind of service (VoxelMind Sparks, Player2, OpenRouter or a local model) and the mod and game version. No name, no ID, nothing from your chats.",
+  "voxelmind_local.stats.turn_off": "[Turn off]"
 }

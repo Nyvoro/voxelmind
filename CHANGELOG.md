@@ -1,5 +1,14 @@
 # VoxelMind Local – Changelog
 
+## 0.4.5 (2026-10-16)
+
+**Your own skins for companions, and an anonymous count of which AI service players use.**
+
+- **Own skins.** A companion can now wear your own skin PNG, not only the skin of another Minecraft account. In the menu under Look, or with `/vml skin <name> <source>`, enter a link to the PNG (`https://…/skin.png`) or the name of a PNG you put in `.minecraft/voxelmind-local/skins/` (the folder is created when the game starts). Slim (Alex-style) arms are detected from the image; add ` slim` or ` classic` after the source if the detection is wrong. Account names work as before.
+  - Minecraft only shows skins that Mojang has signed, so the image goes to MineSkin (mineskin.org), which signs it and returns the signed texture. Everyone sees the skin, also players without the mod. It is uploaded as "unlisted" (not in MineSkin's gallery); only the image is sent. A skin is a 64×64 PNG (old 64×32 skins work too). An own MineSkin API key can go into `"mineskinKey"` in the config; without one, MineSkin signs about ten skins a minute for everyone.
+  - On a server, links into the server's own network only work for the host or an owner-level operator.
+- **Anonymous usage count.** Once a day, after the first answer from the AI, the mod sends one count to api.voxel-mind.com: the kind of AI service (VoxelMind Sparks, Player2, OpenRouter, a local model or another endpoint), the mod version and the game version. No name, no ID, no key, nothing from chats. The host is told in the game with a **[Turn off]** link before the first count is sent; `/vml stats` shows the state, `/vml stats off` (or `"usageStats": false` in the config) turns it off. The totals are public at api.voxel-mind.com/v1/stats.
+
 ## 0.4.4 (2026-10-11)
 
 **The first release of VoxelMind Local on CurseForge.** Same code as 0.4.3, which went up as a beta a few hours earlier; everything below under 0.4.3 is in it.

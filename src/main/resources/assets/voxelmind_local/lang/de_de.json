@@ -87,7 +87,7 @@
   "voxelmind_local.menu.name.hint": "Cae, Ember, Sprout … (3–16 Buchstaben, Ziffern, _)",
   "voxelmind_local.menu.name.fixed": "am Namen hängen die Erinnerungen",
   "voxelmind_local.menu.skin": "Aussehen",
-  "voxelmind_local.menu.skin.hint": "Spielername (optional)",
+  "voxelmind_local.menu.skin.hint": "Spielername, PNG-Link oder Datei.png (optional)",
   "voxelmind_local.menu.skin.default": "Standard-Skin",
   "voxelmind_local.menu.skin.current": "jetzt: %s",
   "voxelmind_local.menu.character": "Charakter",
@@ -108,7 +108,7 @@
   "voxelmind_local.menu.cancel": "Abbrechen",
   "voxelmind_local.menu.create": "Erstellen & holen",
   "voxelmind_local.menu.save": "Speichern",
-  "voxelmind_local.menu.error.skin": "Für das Aussehen braucht es einen Minecraft-Spielernamen (3–16 Buchstaben, Ziffern, _).",
+  "voxelmind_local.menu.error.skin": "Für das Aussehen braucht es einen Minecraft-Spielernamen (3–16 Buchstaben, Ziffern, _), einen PNG-Link (https://…) oder eine .png aus .minecraft/voxelmind-local/skins, optional gefolgt von „slim“.",
   "voxelmind_local.menu.error.name": "Namen haben 3–16 Buchstaben, Ziffern oder Unterstriche.",
   "voxelmind_local.menu.error.exists": "Du hast schon einen Begleiter namens %s.",
   "voxelmind_local.menu.monitor.title": "Monitor",
@@ -169,7 +169,7 @@
   "voxelmind_local.settings.test.no_player2": "Erst mit Player2 verbinden.",
   "voxelmind_local.settings.player2.client_id": "Player2 Client ID",
   "voxelmind_local.settings.player2.client_id.hint": "Player2 Client ID (Developer Dashboard → AI Mods)",
-  "voxelmind_local.menu.skin.tooltip": "Name eines Minecraft-Accounts, dessen Skin er trägt, z. B. Notch. Leer lässt den Standard-Skin.",
+  "voxelmind_local.menu.skin.tooltip": "Ein Minecraft-Account, dessen Skin er trägt (z. B. Notch), ein Link zu deinem eigenen Skin-PNG oder der Name einer PNG, die du in .minecraft/voxelmind-local/skins gelegt hast. Häng „ slim“ an für schmale Arme, falls das nicht erkannt wird. Eigene PNGs werden über MineSkin signiert, damit alle sie sehen. Leer lässt den Standard-Skin.",
   "voxelmind_local.notice.joules": "%s kann gerade nicht denken: Dein kostenloses Player2-KI-Guthaben (Joules) ist aufgebraucht. Es lädt sich täglich von selbst wieder auf; mit Player2 Patron gibt es mehr, oder du wechselst zu einer anderen KI.",
   "voxelmind_local.notice.joules.more": "[Player2-Seite]",
   "voxelmind_local.notice.joules.other": "[Andere KI wählen]",
@@ -250,5 +250,7 @@
   "voxelmind_local.help.feature_request": "[Feature-Wunsch auf Discord]",
   "voxelmind_local.help.support": "[♥ VoxelMind auf Ko-fi unterstützen]",
   "voxelmind_local.modmenu.feature_request": "Feature-Wunsch",
-  "voxelmind_local.modmenu.support": "Auf Ko-fi unterstützen"
+  "voxelmind_local.modmenu.support": "Auf Ko-fi unterstützen",
+  "voxelmind_local.stats.notice": "Damit wir sehen, welche KI-Dienste gewählt werden, schickt die Mod einmal am Tag eine anonyme Zählung: die Art des Dienstes (VoxelMind Sparks, Player2, OpenRouter oder ein lokales Modell) sowie Mod- und Spielversion. Kein Name, keine ID, nichts aus deinen Chats.",
+  "voxelmind_local.stats.turn_off": "[Ausschalten]"
 }

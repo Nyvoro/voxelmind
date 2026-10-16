@@ -73,6 +73,17 @@ public final class LocalConfig {
     public int hearingRange = 48;
     /** Also write full prompts into the world's voxelmind-local/logs (local debugging only). */
     public boolean logPrompts = false;
+    /**
+     * One anonymous count a day of which kind of AI service this installation uses (see UsageStats): the kind,
+     * the mod version and the game version, nothing else. false turns it off; so does /vml stats off.
+     */
+    public boolean usageStats = true;
+    /** Set once the host or an owner-level operator was told about {@link #usageStats} in the game; nothing is sent before. */
+    public boolean usageStatsNoticed = false;
+    /** UTC day of the last count sent. */
+    public String usageStatsDay = "";
+    /** Optional own MineSkin API key for signing own skin PNGs; empty uses MineSkin without a key (about 10 skins a minute). */
+    public String mineskinKey = "";
 
     public static LocalConfig get() {
         return current;
