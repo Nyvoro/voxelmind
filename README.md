@@ -59,7 +59,7 @@ See `CONTRIBUTING.md`: the core is maintained by Nyvoro UG; changes come in as p
 
 ## Build and test
 
-Requires JDK 21 and JDK 25 (Gradle toolchains) and the Gradle cache the main mod uses (`GRADLE_USER_HOME=V:\Android\Gradle`).
+Requires JDK 21 and JDK 25 (Gradle finds them as toolchains; list them in `org.gradle.java.installations.paths` if it does not).
 
 One source tree builds 16 jars (Minecraft 1.21 to 26.2, Stonecutter); the checked-in source is the 26.2 state. `bash tools/build-all.sh` builds and checks all of them into `dist/`; versions, smoke tests and how to add a version are in [docs/VERSIONS.md](docs/VERSIONS.md). For 26.2:
 

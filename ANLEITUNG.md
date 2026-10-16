@@ -16,7 +16,7 @@ Es gibt keinen VoxelMind-Server, kein Pflicht-Konto und keine Weltdaten bei der 
 ## Starten
 
 1. **CurseForge-App neu starten.** Unter „Minecraft“ erscheint die neue Instanz **„VoxelMind Local Test“** (26.2, Fabric 0.19.5). Sie enthält nur Fabric API und diesen Mod. Deine anderen Instanzen, auch NewMC mit dem alten Mod, sind unverändert.
-   - Erscheint sie nicht: in CurseForge *Create Custom Profile* → Minecraft 26.2 → Fabric 0.19.5, dann über *Open Folder* die beiden JARs aus `V:\VoxelMind\voxelmind-local\dist\` in `mods` legen.
+   - Erscheint sie nicht: in CurseForge *Create Custom Profile* → Minecraft 26.2 → Fabric 0.19.5, dann über *Open Folder* die VoxelMind-Local-JAR deiner Version (aus `dist/` oder von CurseForge) und Fabric API in `mods` legen.
 2. **Play**, neue Welt anlegen (Survival, gern „Allow Cheats“ für `/give`, `/time`).
 3. **KI verbinden** (einmalig, gilt für alle Welten der Instanz): Beim Betreten der Welt steht im Chat ein Link **[Settings]**, alternativ `/vml setup` oder eine eigene Taste unter *Optionen → Steuerung → Sonstiges → „VoxelMind: KI-Einstellungen“*.
    - **„KI von: Player2 (kostenlos)“ → „Mit Player2 verbinden“**: Läuft die Player2-App, reicht ein Klick; sonst öffnet sich der Browser und du bestätigst einen Code. Player2 wählt das Modell, Spielen ist kostenlos (tägliches KI-Guthaben „Joules“, mehr mit Player2 Patron). Auf Servern: `/vml player2`. Die Game Client ID von VoxelMind (Player2 Developer Dashboard, „AI Mods“) ist eingebaut; `"player2ClientId"` in der Config überschreibt sie nur bei Bedarf.
@@ -26,7 +26,7 @@ Es gibt keinen VoxelMind-Server, kein Pflicht-Konto und keine Weltdaten bei der 
      - „Pakete und Preise“ öffnet voxel-mind.com/sparks. Nach der Anmeldung heißt der Knopf „Deine Sparks“ und öffnet deine private Kontoseite (Stand, Verbrauch pro Tag, Gutschriften).
      - Einen Sparks-Code (z. B. aus unserer Mail an ehemalige Abonnenten) löst du im Spiel mit `/vml sparks redeem <Code>` ein, ohne Mod auf voxel-mind.com/sparks/redeem.
      - „Token kopieren“ ist für dedizierte Server: dort `/vml endpoint voxelmind`, dann `/vml key <Token>`.
-     - Hinweis: Das braucht die API unter `api.voxel-mind.com`, die erst nach Robins Deploy erreichbar ist. Im Dev-Client (Offline-Konto) scheitert die Mojang-Anmeldung absichtlich.
+     - Hinweis: Das braucht die API unter `api.voxel-mind.com`. Im Dev-Client (Offline-Konto) scheitert die Mojang-Anmeldung absichtlich.
    - **„Mit OpenRouter anmelden“** öffnet den Browser. Nach der Anmeldung legt OpenRouter in deinem Konto einen Key für VoxelMind an, der Mod speichert ihn in `config/voxelmind-local.json`. Neue OpenRouter-Konten brauchen etwas Guthaben.
    - Oder einen vorhandenen Key ins Feld einfügen.
    - Oder oben „KI von“ auf **Ollama (dieser PC)** / **LM Studio** / **Anderer Server** umstellen.
@@ -148,4 +148,4 @@ Die fünf fehlerfreien Modelle stehen in der Auswahl oben mit „✔“ und geme
 
 ## Rückbau
 
-Instanz in CurseForge löschen (oder den Ordner `C:\Users\Robin\curseforge\minecraft\Instances\VoxelMind Local Test`). Sonst wurde nichts verändert.
+Instanz in CurseForge löschen (oder ihren Ordner unter `curseforge\minecraft\Instances\`). Sonst wurde nichts verändert.
