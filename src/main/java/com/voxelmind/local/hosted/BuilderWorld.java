@@ -179,8 +179,17 @@ public final class BuilderWorld {
             Matcher m = NUMBERING.matcher(line);
             if (m.find()) line = line.substring(m.end());
             String[] t = line.trim().split("\\s+");
+            if (!t[0].equals("fill") && !t[0].equals("setblock")) {
+                rejected.add(line + " (not a fill or setblock command)");
+                continue;
+            }
+            int values = t[0].equals("fill") ? 7 : 4;
+            if (t.length - 1 != values) {
+                rejected.add(line + " (" + t[0] + " takes " + values + " values, this line has " + (t.length - 1) + ")");
+                continue;
+            }
             try {
-                if (t[0].equals("fill") && t.length == 8) {
+                if (t[0].equals("fill")) {
                     int[] c = ints(t, 1, 6);
                     String reason = refuseBlock(t[7]);
                     if (reason != null) {
@@ -188,7 +197,7 @@ public final class BuilderWorld {
                         continue;
                     }
                     ops.add(new Op(true, c[0], c[1], c[2], c[3], c[4], c[5], cleanBlock(t[7])));
-                } else if (t[0].equals("setblock") && t.length == 5) {
+                } else {
                     int[] c = ints(t, 1, 3);
                     String reason = refuseBlock(t[4]);
                     if (reason != null) {
@@ -196,8 +205,6 @@ public final class BuilderWorld {
                         continue;
                     }
                     ops.add(new Op(false, c[0], c[1], c[2], c[0], c[1], c[2], cleanBlock(t[4])));
-                } else {
-                    rejected.add(line);
                 }
             } catch (NumberFormatException e) {
                 rejected.add(line + " (coordinates must be integers within ±40)");

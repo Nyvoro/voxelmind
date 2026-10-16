@@ -2,6 +2,7 @@ package com.voxelmind.local.companion;
 
 import com.voxelmind.local.VoxelMindLocal;
 import com.voxelmind.local.action.ActionContext;
+import com.voxelmind.local.action.AttackAction;
 import com.voxelmind.local.action.BodyAction;
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Navigator;
@@ -21,14 +22,24 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Enemy;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /** One companion at runtime: its body, the action it is carrying out, and its mind. */
 public final class Companion implements CompanionPlayer.BodyListener {
     public static final int SAY_RANGE = 48;
+    /** Hostile mobs within this many blocks are watched for whom they target. */
+    private static final double THREAT_RANGE = 24;
+    /** Ticks between two looks at whom the hostile mobs around target. */
+    private static final int THREAT_SCAN_TICKS = 10;
 
     public final CompanionState state;
     private final CompanionManager manager;
@@ -41,6 +52,9 @@ public final class Companion implements CompanionPlayer.BodyListener {
     /** The God or Builder session of a hosted kind; null for a companion with a player body. */
     public final @Nullable HostedMind hosted;
     private int deadTicks;
+    private int threatScan;
+    /** The hostile mobs that targeted the body or its owner at the last look, by entity id, with whom they targeted. */
+    private final Map<Integer, UUID> comingAt = new HashMap<>();
 
     public record LastAction(String tool, String call, String outcome, String result, long at) {}
 
@@ -118,7 +132,31 @@ public final class Companion implements CompanionPlayer.BodyListener {
             if (action == current && action.finished()) record(true);
         }
         if (body == null || body.isDeadOrDying()) return;
+        if (++threatScan % THREAT_SCAN_TICKS == 0) scanThreats(body);
         mind.tick(server);
+    }
+
+    /**
+     * A hostile mob that starts targeting the body or its owner is an event, and wakes the head like a hit does, unless the
+     * body is fighting that very mob.
+     */
+    private void scanThreats(CompanionPlayer b) {
+        ServerPlayer owner = owner();
+        Map<Integer, UUID> now = new HashMap<>();
+        for (Mob mob : Compat.level(b).getEntitiesOfClass(Mob.class, b.getBoundingBox().inflate(THREAT_RANGE), m -> m instanceof Enemy && m.isAlive())) {
+            LivingEntity t = mob.getTarget();
+            if (t == null || t != b && t != owner) continue;
+            now.put(mob.getId(), t.getUUID());
+            if (t.getUUID().equals(comingAt.get(mob.getId()))) continue;
+            String who = t == b ? "you" : owner.getGameProfile().name();
+            String what = Names.entity(mob) + " [#" + mob.getId() + "]";
+            event("threat", what + " is now coming at " + who + " (" + Math.round(b.distanceTo(mob)) + "m " + Names.direction(b.position(), mob.position())
+                    + " of you)", false, null);
+            boolean fightingIt = current instanceof AttackAction attack && !attack.finished() && attack.target() == mob;
+            if (!fightingIt) mind.wake(what + " is coming at " + who, 150);
+        }
+        comingAt.clear();
+        comingAt.putAll(now);
     }
 
     private void respawn() {
@@ -199,7 +237,7 @@ public final class Companion implements CompanionPlayer.BodyListener {
     public String bodyActionLine() {
         long now = System.currentTimeMillis();
         if (current != null && !current.finished()) {
-            String progress = current.progress();
+            String progress = current.status();
             return current.call() + " running for " + ((now - currentStartedAt) / 1000) + "s"
                     + (progress.isEmpty() ? "" : " — " + progress) + "; completion not yet reported";
         }
@@ -216,7 +254,7 @@ public final class Companion implements CompanionPlayer.BodyListener {
 
     public @Nullable Activity activity() {
         if (current == null || current.finished()) return null;
-        return new Activity(current.call(), (System.currentTimeMillis() - currentStartedAt) / 1000, current.progress());
+        return new Activity(current.call(), (System.currentTimeMillis() - currentStartedAt) / 1000, current.status());
     }
 
     // ---- events ----
@@ -291,7 +329,7 @@ public final class Companion implements CompanionPlayer.BodyListener {
         if (body == null) return;
         Entity attacker = source.getEntity();
         String from = attacker != null ? Names.entity(attacker) + " [#" + attacker.getId() + "]" : source.getMsgId();
-        event("damage", "took " + String.format("%.1f", healthLost) + " damage from " + from + "; HP now " + Math.round(body.getHealth()) + "/20", false, null);
+        event("damage", "took " + String.format(java.util.Locale.ROOT, "%.1f", healthLost) + " damage from " + from + "; HP now " + Math.round(body.getHealth()) + "/20", false, null);
         boolean fighting = current != null && !current.finished() && current.tool().equals("attack");
         if (!fighting) mind.wake("hurt by " + from, 150);
     }

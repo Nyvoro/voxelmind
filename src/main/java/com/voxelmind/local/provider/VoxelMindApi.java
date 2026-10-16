@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * VoxelMind API (api.voxel-mind.com): our own endpoint, paid with prepaid Sparks. The player signs in
- * with the Minecraft account itself, through the same Mojang handshake a Minecraft server uses; the
+ * with the Minecraft account itself, by signing a server id with the player key Mojang certifies; the
  * resulting token stays in config/voxelmind-local.json and is only sent to the VoxelMind API.
  */
 public final class VoxelMindApi {
@@ -34,6 +34,12 @@ public final class VoxelMindApi {
     }
 
     public record Login(String token, String name, double welcome, double sparks, double free) {}
+
+    /** What the player's key signs: this prefix and the server id. */
+    public static final String CHALLENGE = "VoxelMind sign-in ";
+
+    /** The signed server id with Mojang's certificate for the signing key (uuid, expiry, X.509 key, Mojang's signature). */
+    public record Proof(String serverId, String uuid, long expiresAt, byte[] publicKey, byte[] keySignature, byte[] signature) {}
 
     private VoxelMindApi() {}
 
@@ -68,16 +74,24 @@ public final class VoxelMindApi {
         });
     }
 
-    /** Step 1: a server id the client then joins at Mojang. */
+    /** Step 1: a server id the client then signs with the player key. */
     public static CompletableFuture<String> startLogin() {
         return post("/auth/minecraft/start", new JsonObject()).thenApply(root -> root.get("server_id").getAsString());
     }
 
-    /** Step 2, after the join: Mojang confirms the account to the API, which answers with a token. */
-    public static CompletableFuture<Login> finishLogin(String name, String serverId) {
+    /** Step 2: the API checks the certificate and the signature, and answers with a token. */
+    public static CompletableFuture<Login> finishLogin(String name, Proof proof) {
+        java.util.Base64.Encoder b64 = java.util.Base64.getEncoder();
+        JsonObject certificate = new JsonObject();
+        certificate.addProperty("uuid", proof.uuid());
+        certificate.addProperty("expires_at", proof.expiresAt());
+        certificate.addProperty("public_key", b64.encodeToString(proof.publicKey()));
+        certificate.addProperty("key_signature", b64.encodeToString(proof.keySignature()));
         JsonObject body = new JsonObject();
         body.addProperty("name", name);
-        body.addProperty("server_id", serverId);
+        body.addProperty("server_id", proof.serverId());
+        body.add("certificate", certificate);
+        body.addProperty("signature", b64.encodeToString(proof.signature()));
         return post("/auth/minecraft/finish", body).thenApply(root -> new Login(root.get("token").getAsString(), root.get("name").getAsString(),
                 num(root, "welcome_sparks"), num(root, "sparks"), num(root, "free_sparks")));
     }

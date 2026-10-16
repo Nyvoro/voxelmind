@@ -8,10 +8,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -20,8 +21,11 @@ import java.util.Set;
 
 /**
  * build_shelter: a 5×5 hut with walls two blocks high, a two-high door gap and a
- * flat roof (about 55 blocks) of one carried material, centred on a ground spot.
- * Walls reach down to the ground where it dips. Carried out like place_blocks.
+ * flat roof (55 blocks on level ground) of one carried material, centred on a ground
+ * spot. The ground is found per column as survey finds it, so trees are not ground;
+ * walls reach down to it where it dips, which takes more blocks. Nothing is built when
+ * tree trunks or branches stand in the hut's cells: the result names them. Carried out
+ * like place_blocks, without its per-call limit.
  */
 public final class BuildShelterAction extends BodyAction {
     private final String materialText;
@@ -78,7 +82,7 @@ public final class BuildShelterAction extends BodyAction {
         }
         int base = Integer.MIN_VALUE;
         for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
-            base = Math.max(base, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, center.getX() + dx, center.getZ() + dz));
+            base = Math.max(base, SurveyAction.ground(level, center.getX() + dx, center.getZ() + dz) + 1);
         }
         // Door on the side that faces the owner, or the body.
         ServerPlayer owner = ctx.owner();
@@ -96,7 +100,7 @@ public final class BuildShelterAction extends BodyAction {
                 int z = center.getZ() + dz;
                 boolean wall = Math.abs(dx) == 2 || Math.abs(dz) == 2;
                 if (wall) {
-                    int ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+                    int ground = SurveyAction.ground(level, x, z) + 1;
                     boolean isDoor = x == door.getX() && z == door.getZ();
                     for (int y = Math.min(ground, base); y <= base + 1; y++) {
                         if (isDoor && y >= base) continue;
@@ -106,15 +110,34 @@ public final class BuildShelterAction extends BodyAction {
                 entries.add(new PlaceBlocksAction.Entry(new BlockPos(x, base + 2, z), id));
             }
         }
+        String where = "a 5×5 shelter centred on (" + center.getX() + "," + base + "," + center.getZ() + ")";
+        // Trees in the hut's cells (walls, roof and the room inside): a trunk or branch is no ground to build on or around.
+        List<String> trees = new ArrayList<>();
+        List<BlockPos> cells = new ArrayList<>();
+        for (PlaceBlocksAction.Entry e : entries) cells.add(e.pos());
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int y = base; y <= base + 1; y++) {
+            cells.add(new BlockPos(center.getX() + dx, y, center.getZ() + dz));
+        }
+        cells.add(door);
+        cells.add(door.above());
+        for (BlockPos cell : cells) {
+            BlockState state = level.getBlockState(cell);
+            if (state.is(BlockTags.LOGS)) trees.add(Names.id(state.getBlock()) + " at " + Names.pos(cell));
+        }
+        if (!trees.isEmpty()) {
+            failed("nothing built: tree trunks or branches stand in the cells of " + where + ": "
+                    + String.join(", ", trees.subList(0, Math.min(8, trees.size()))) + (trees.size() > 8 ? " and " + (trees.size() - 8) + " more" : ""));
+            return;
+        }
         int needed = entries.size();
         int carried = Inv.count(body, material);
         if (carried < needed) {
-            failed("a shelter here needs about " + needed + " " + id + "; you carry " + carried);
+            failed(where + " needs " + needed + " " + id + " (55 on level ground; walls reach down where the ground dips); you carry " + carried);
             return;
         }
         plan = "5×5 " + id + " shelter centred on (" + center.getX() + "," + base + "," + center.getZ() + "), door facing "
                 + doorSide.getName() + " at (" + door.getX() + "," + base + "," + door.getZ() + ")";
-        builder = new PlaceBlocksAction(call(), entries);
+        builder = new PlaceBlocksAction(call(), entries, Integer.MAX_VALUE);
         builder.start(ctx);
         if (builder.finished()) finishFrom(builder);
     }

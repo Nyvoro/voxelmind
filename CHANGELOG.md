@@ -1,5 +1,26 @@
 # VoxelMind Local – Changelog
 
+## 0.4.4 (2026-10-11)
+
+**The first release of VoxelMind Local on CurseForge.** Same code as 0.4.3, which went up as a beta a few hours earlier; everything below under 0.4.3 is in it.
+
+## 0.4.3 (2026-10-11)
+
+**Huts stand on the ground in a forest, a companion no longer stays under water when a search ends early, and it fights like a player.**
+
+- **Sign-in with VoxelMind Sparks works again.** Sign-in with VoxelMind Sparks signs a server id with the player's Mojang-certified chat key; the API checks it offline because Mojang refuses requests from Cloudflare. Your password, your Mojang token and the private key stay on your PC.
+- **build_shelter in a forest.** The ground is found per column the way survey finds it, so tree trunks and branches no longer count as ground: a hut in a dark oak forest used to be planned on top of the trunks (8 blocks high, over 120 blocks, refused). Where trunks or branches stand in the hut's cells, nothing is built and the result names them with their positions. A plan over uneven ground that needs more than 128 blocks is built anyway (the limit is for place_blocks calls), and the tool says what it really takes: 55 blocks on level ground, more where the walls reach down.
+- **survey** reports the ground under a trunk (marked T) and marks leaves or branches overhead (^), instead of the top of the trunk.
+- **place_blocks names every block it skipped**, with the reason and the cell (for example "occupied by dark_oak_log at (22,95,233)"); before, the second pass forgot the reasons of the first.
+- **Up to air before reporting.** When an action ends its own walk early while the companion's head is under water (explore spotting an animal mid-swim), the body first swims up: to the nearest ground with air above, or else to the water surface, and the result says where it came up. It used to stop under water and could drown while the next decision was still being made. explore also says how far below or above the find is, how deep it is under water and whether a walking or swimming route leads to it ("axolotl … 24 blocks below you, under water 25 blocks deep; no walking or swimming route to within reach of it was found").
+- **Knockback.** A player's hit now knocks the companion back like any player (the server sends that knockback to the player's game, which the companion's body had ignored).
+- **Fighting like a player.** attack closes in only while the target is out of reach and holds at reach (it used to creep up to 1.8 blocks); it hits when the attack is fully charged and sprints into that hit for the sprint knockback; while the attack recharges it steps back out of the target's own melee range where the ground behind is safe (no drop of more than two blocks, no water, lava or fire). In the game test against a zombie with an iron sword, 0.4.2 took a hit and stood 2 ticks in the zombie's reach while recharging; 0.4.3 took none.
+- **Mobs coming at you are facts.** A hostile mob that starts targeting the companion or its owner is an event ("zombie [#57] is now coming at you (12m north of you)") and wakes the companion like a hit does (not while it is already fighting that mob), so it can act before the first hit. Each line under Threats says whom the mob targets.
+- Numbers in facts always use a decimal point ("took 1.5 damage"), also in a German game.
+- **Builder and God: a command that changes nothing is not a failure.** A `fill` or `setblock` on blocks that already are what it sets answers "No blocks were filled"; that used to count as an error, so a Builder's cottage was reported as FAILED although it stood, and the model went looking for a fault. Such steps now count as done, and the result says how many changed nothing because the blocks already were so.
+- **Builder: why geometry lines were skipped.** When the build's geometry model writes lines the Builder cannot use, the result now shows up to three of them with the reason (for example "fill takes 7 values, this line has 8" for a `hollow` fill, or a block state with a space in it) instead of only their number. Each geometry call is in the decision log too, with its full reply when `logPrompts` is on.
+- **The God speaks plain text, like the Builder.** Text the God writes outside its `say` tool used to stay with itself, and it kept greeting players who never saw the greeting; now it reaches the players in chat.
+
 ## 0.4.2 (2026-10-10)
 
 **Companions speak and act in one decision, use doors, and know what you built.**

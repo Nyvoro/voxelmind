@@ -86,10 +86,7 @@ public final class CommandRunner {
         for (Component line : lines) {
             TextColor color = line.getStyle().getColor();
             if (color != null && color.equals(TextColor.fromLegacyFormat(ChatFormatting.RED))) red = true;
-            for (Component part : line.toFlatList()) {
-                if (part.getContents() instanceof TranslatableContents t && NO_OP_KEYS.contains(t.getKey())) noOp = true;
-            }
-            if (line.getContents() instanceof TranslatableContents t && NO_OP_KEYS.contains(t.getKey())) noOp = true;
+            if (noOpKey(line)) noOp = true;
             if (!text.isEmpty()) text.append('\n');
             text.append(line.getString());
         }
@@ -104,6 +101,19 @@ public final class CommandRunner {
         }
         boolean ok = !thrown && (!red || noOp) && (callbacks[1] == 0 || callbacks[0] > 0 || noOp);
         return new Result(ok, out, noOp, callbacks[2]);
+    }
+
+    /**
+     * Whether the message is a vanilla no-op ("No blocks were filled": the blocks already were so). A failure
+     * arrives as an empty red line with the translatable message as its sibling, so the whole tree is searched.
+     */
+    static boolean noOpKey(Component c) {
+        if (c.getContents() instanceof TranslatableContents t) {
+            if (NO_OP_KEYS.contains(t.getKey())) return true;
+            for (Object arg : t.getArgs()) if (arg instanceof Component a && noOpKey(a)) return true;
+        }
+        for (Component sibling : c.getSiblings()) if (noOpKey(sibling)) return true;
+        return false;
     }
 
     /** Runs at the host player's live position, rotation and dimension. */

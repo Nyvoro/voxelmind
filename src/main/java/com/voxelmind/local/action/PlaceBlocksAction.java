@@ -21,18 +21,24 @@ import java.util.Map;
 /**
  * place_blocks: places a list of carried blocks, lowest first, walking into reach
  * as needed. Occupied cells, cells without a solid neighbour and blocks you run
- * out of are skipped and reported.
+ * out of are skipped; the result names each skipped cell with its reason, also
+ * those the second pass did not retry.
  */
 public final class PlaceBlocksAction extends BodyAction {
+    /** Blocks per call the model can ask for. */
     public static final int MAX = 128;
+    /** Cells listed per skip reason in the result; the rest are counted. */
+    private static final int LISTED = 8;
 
     public record Entry(BlockPos pos, String block) {}
 
     private final List<Entry> requested;
+    private final int limit;
     private final List<Entry> queue = new ArrayList<>();
     private int index;
     private int placed;
-    private final Map<String, Integer> skipped = new LinkedHashMap<>();
+    /** Why each cell that is not placed was skipped, by cell, in the order they were skipped; kept across both passes. */
+    private final Map<BlockPos, String> skipped = new LinkedHashMap<>();
     private final Map<Item, Integer> used = new LinkedHashMap<>();
     private boolean walking;
     private int settle;
@@ -40,8 +46,14 @@ public final class PlaceBlocksAction extends BodyAction {
     private int alreadyThere;
 
     public PlaceBlocksAction(String call, List<Entry> entries) {
+        this(call, entries, MAX);
+    }
+
+    /** With another limit than the model's per-call one, e.g. for build_shelter's whole plan. */
+    public PlaceBlocksAction(String call, List<Entry> entries, int limit) {
         super("place_blocks", call);
         this.requested = entries;
+        this.limit = limit;
     }
 
     @Override
@@ -50,8 +62,8 @@ public final class PlaceBlocksAction extends BodyAction {
             failed("no blocks given");
             return;
         }
-        if (requested.size() > MAX) {
-            failed("at most " + MAX + " blocks per call; got " + requested.size());
+        if (requested.size() > limit) {
+            failed("at most " + limit + " blocks per call; got " + requested.size());
             return;
         }
         queue.addAll(requested);
@@ -105,7 +117,7 @@ public final class PlaceBlocksAction extends BodyAction {
                 queue.clear();
                 queue.addAll(retry);
                 index = 0;
-                skipped.clear();
+                for (Entry e : retry) skipped.remove(e.pos());
                 return;
             }
             finish(ctx);
@@ -120,7 +132,7 @@ public final class PlaceBlocksAction extends BodyAction {
             return;
         }
         if (!current.canBeReplaced()) {
-            skip("occupied");
+            skip("occupied by " + Names.id(current.getBlock()));
             return;
         }
         if (Inv.count(body, item) == 0) {
@@ -173,7 +185,7 @@ public final class PlaceBlocksAction extends BodyAction {
     }
 
     private void skip(String reason) {
-        skipped.merge(reason, 1, Integer::sum);
+        skipped.put(queue.get(index).pos(), reason);
         index++;
     }
 
@@ -182,9 +194,16 @@ public final class PlaceBlocksAction extends BodyAction {
         if (alreadyThere > 0) text.append("; ").append(alreadyThere).append(" were already in place");
         if (!used.isEmpty()) text.append(" (used ").append(Inv.describe(used)).append(')');
         if (!skipped.isEmpty()) {
+            Map<String, List<BlockPos>> byReason = new LinkedHashMap<>();
+            for (Map.Entry<BlockPos, String> s : skipped.entrySet()) byReason.computeIfAbsent(s.getValue(), r -> new ArrayList<>()).add(s.getKey());
             text.append("; skipped: ");
             int n = 0;
-            for (Map.Entry<String, Integer> s : skipped.entrySet()) text.append(n++ > 0 ? ", " : "").append(s.getValue()).append("× ").append(s.getKey());
+            for (Map.Entry<String, List<BlockPos>> r : byReason.entrySet()) {
+                List<BlockPos> cells = r.getValue();
+                text.append(n++ > 0 ? "; " : "").append(cells.size()).append("× ").append(r.getKey()).append(" at ");
+                for (int i = 0; i < Math.min(LISTED, cells.size()); i++) text.append(i > 0 ? ", " : "").append(Names.pos(cells.get(i)));
+                if (cells.size() > LISTED) text.append(" and ").append(cells.size() - LISTED).append(" more");
+            }
         }
         text.append("; now standing at ").append(Names.pos(ctx.body().blockPosition()));
         if (placed > 0 || alreadyThere == requested.size()) done(text.toString());

@@ -40,7 +40,7 @@ Minecraft → code observes and condenses facts → LLM sees facts, conversation
   - Commands run through `CommandRunner` as a captured console source. `CommandPolicy` refuses admin verbs and harmful verbs against `@a`; that is a technical safety boundary. `WorldResets` restores changed gamerules and effects when a God leaves, and `WorldBackup` zips the world once a day before a session.
   - Only the singleplayer host or an operator may bring either kind (`CompanionManager.mayHost`).
 - **VoxelMind Sparks** (`provider/VoxelMindApi`, `client/VoxelMindSignIn`):
-  - Sign-in with the Minecraft account itself: the client joins a server id at Mojang (`sessionService().joinServer`), and the API asks Mojang `hasJoined`. No password or Mojang token leaves the PC.
+  - Sign-in with the Minecraft account itself: the client signs a server id with the player key Mojang certifies for chat signing (`getProfileKeyPairManager()`), and the API checks Mojang's certificate offline (Mojang refuses requests from Cloudflare). No password, Mojang token or private key leaves the PC.
   - The resulting token (`voxelmindKey`) is only ever sent to the VoxelMind API.
   - The model is fixed (`voxelmind/standard`), so the API routes the provider.
   - `402` means the Sparks are used up; it becomes a chat notice with a link to packs and prices (`VmlCommand.sparksNotice`).
@@ -57,7 +57,7 @@ One source tree builds 16 jars (Minecraft 1.21 to 26.2, Stonecutter); the checke
 
 ```sh
 ./gradlew :26.2:build               # versions/26.2/build/libs/voxelmind-local-<ver>+26.2.jar
-./gradlew :26.2:runGameTest         # 118 headless server tests: body, tools, settings, Builder fill/undo, God rain/sequence/rules, command boundary, Sparks config, AI label, one mind against a stub endpoint, doors, placed blocks
+./gradlew :26.2:runGameTest         # 132 headless server tests: body, tools, settings, Builder fill/undo and no-op fills, geometry rejections, God rain/sequence/rules and plain text, command boundary, Sparks config, AI label, one mind against a stub endpoint, doors, placed blocks, building among trees, surfacing, knockback, melee technique, threat events
 ./gradlew :26.2:runClientGameTest   # real client: summon, skin, chat, settings, model list, menu, monitor, memories, create companion/builder/god by clicks, screenshots
 ./gradlew :26.2:runServer           # dedicated dev server in run/ (port 25599, offline mode)
 ./gradlew :26.2:runServer -PvoxelmindApi=http://127.0.0.1:8797/v1     # against a local `wrangler dev` VoxelMind API (also runClient, runGameTest)

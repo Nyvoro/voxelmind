@@ -228,7 +228,7 @@ public class MindGameTests {
         ServerPlayer p = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
         BlockPos abs = helper.absolutePos(rel);
         p.snapTo(abs.getX() + 0.5, abs.getY(), abs.getZ() + 0.5, 0f, 0f);
-        server.getPlayerList().placeNewPlayer(new CompanionConnection(), p, CommonListenerCookie.createInitial(profile, false));
+        server.getPlayerList().placeNewPlayer(new CompanionConnection(p), p, CommonListenerCookie.createInitial(profile, false));
         p.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
         p.setGameMode(GameType.CREATIVE);
         return p;
@@ -742,6 +742,44 @@ public class MindGameTests {
             long rows = c.state.timeline.last(Timeline.KEEP).stream().filter(e -> e.kind.equals("result") && e.text.startsWith("deadly()")).count();
             helper.assertTrue(rows == 1, "its result was recorded once, got " + rows);
             helper.assertTrue(sent(c, "Back again.") != null, "the companion decided again after respawning");
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void aMobComingAtTheBodyIsAnEventAndWakesTheHeadBeforeAnyHit(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion(call("say", "text", "A zombie!")));
+        net.minecraft.world.entity.monster.zombie.Zombie zombie = helper.spawn(net.minecraft.world.entity.EntityTypes.ZOMBIE, new BlockPos(7, 1, 7));
+        zombie.setTarget(c.body());
+        expect(helper, owner, c, () -> {
+            List<Timeline.Event> events = c.state.timeline.last(Timeline.KEEP);
+            Timeline.Event threat = events.stream().filter(e -> e.kind.equals("threat")
+                    && e.text.startsWith("zombie [#" + zombie.getId() + "] is now coming at you (")).findFirst().orElse(null);
+            helper.assertTrue(threat != null, "no threat event yet");
+            helper.assertTrue(events.stream().noneMatch(e -> e.kind.equals("damage") && e.seq < threat.seq), "the zombie hit before the event");
+            helper.assertTrue(decisionLog(c).stream().anyMatch(l -> l.contains("is coming at you")), "the event did not wake the head");
+            zombie.discard();
+        });
+    }
+
+    @GameTest(maxTicks = MAX_TICKS)
+    public void damageFactsUseADecimalPointInAnyLocale(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion(call("say", "text", "Ouch.")));
+        java.util.Locale before = java.util.Locale.getDefault();
+        try {
+            java.util.Locale.setDefault(java.util.Locale.GERMANY);
+            c.onHurt(helper.getLevel().damageSources().generic(), 1.5f);
+        } finally {
+            java.util.Locale.setDefault(before);
+        }
+        expect(helper, owner, c, () -> {
+            boolean dot = c.state.timeline.last(Timeline.KEEP).stream().anyMatch(e -> e.kind.equals("damage") && e.text.startsWith("took 1.5 damage"));
+            helper.assertTrue(dot, "no damage fact with 1.5: " + c.state.timeline.last(3).stream().map(e -> e.text).toList());
         });
     }
 

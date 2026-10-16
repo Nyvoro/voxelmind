@@ -68,7 +68,7 @@ public class PlacedGameTests {
         GameProfile profile = new GameProfile(id, "PlacedBody" + COUNTER.incrementAndGet());
         CompanionPlayer body = new CompanionPlayer(server, level, profile);
         body.snapTo(abs.getX() + 0.5, abs.getY(), abs.getZ() + 0.5, 0f, 0f);
-        server.getPlayerList().placeNewPlayer(new CompanionConnection(), body, CommonListenerCookie.createInitial(profile, false));
+        server.getPlayerList().placeNewPlayer(new CompanionConnection(body), body, CommonListenerCookie.createInitial(profile, false));
         body.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
         body.setGameMode(GameType.SURVIVAL);
         return body;

@@ -290,7 +290,7 @@ public final class CompanionManager {
             VoxelMindLocal.LOG.error("Could not load player data of {}", c.name(), e);
         }
         body.snapTo(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, owner.getYRot() + 180f, 0f);
-        server.getPlayerList().placeNewPlayer(new CompanionConnection(), body, CommonListenerCookie.createInitial(profile, false));
+        server.getPlayerList().placeNewPlayer(new CompanionConnection(body), body, CommonListenerCookie.createInitial(profile, false));
         Compat.acceptPlayerLoad(body);
         // Before 1.21.9 placeNewPlayer puts a player where its saved data says (or at the world spawn); the body
         // belongs next to its owner, in the owner's dimension.

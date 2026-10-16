@@ -275,14 +275,9 @@ public abstract class HostedMind {
         List<String> applied = new ArrayList<>();
         boolean wakeAfter = false;
         String content = response.content() == null ? "" : response.content().trim();
-        if (!content.isEmpty() && plainTextSpeaks()) {
+        if (!content.isEmpty()) {
             for (String part : split(content, 400)) speak(part, "chat", null);
             applied.add("reply text");
-        } else if (!content.isEmpty()) {
-            // What became of the text is a fact for the next turn: it reached no one.
-            c.event("note", "your plain text stayed with you; only say reaches the players: \""
-                    + (content.length() > 200 ? content.substring(0, 200) + "…" : content) + "\"", false, null);
-            applied.add("text to itself");
         }
         for (LlmClient.ToolCall call : response.toolCalls()) {
             Outcome outcome;
@@ -384,14 +379,6 @@ public abstract class HostedMind {
         return humans();
     }
 
-    /**
-     * Where plain reply text goes, exactly as the hosted brain had it: the Builder's reaches its owner in
-     * chat; the God's stays with itself (only its say tool speaks), and its [TURN] says so.
-     */
-    protected boolean plainTextSpeaks() {
-        return true;
-    }
-
     /** Who plain reply text reaches, as the turn block names it. */
     protected String listeners() {
         return "the players";
@@ -409,7 +396,8 @@ public abstract class HostedMind {
         if (refused != null) return new Outcome("refused run " + shown + ": " + refused, false, false);
         resets.before(server(), command);
         CommandRunner.Result r = CommandRunner.runAtHost(host, c.name(), command);
-        return new Outcome((r.ok() ? "result of \"" : "FAILED \"") + shown + "\": " + r.text(), r.ok(), true);
+        return new Outcome((r.ok() ? "result of \"" : "FAILED \"") + shown + "\": " + r.text()
+                + (r.noOp() ? " (changed nothing: the blocks already were so)" : ""), r.ok(), true);
     }
 
     protected Outcome observe(JsonObject args) {
@@ -527,9 +515,7 @@ public abstract class HostedMind {
         return "[TURN]\nWoken by: " + (wokeBy.isBlank() ? "a quiet moment" : wokeBy) + ". Facts are 0s old; positions and health are observations from now, not live values during generation.\n"
                 + "This session: " + minutes + " min in, your turn #" + turns + ".\n"
                 + (note.isBlank() ? "" : "Your private note from last time: \"" + note + "\"\n")
-                + (plainTextSpeaks()
-                ? "Decide now: reply in text, call any tools you want (several are fine), or observe to wait. Plain reply text reaches " + listeners() + " in chat; say can also use title or actionbar."
-                : "Decide now: call any tools you want (several are fine), or observe to wait. Only say speaks to the players.");
+                + "Decide now: reply in text, call any tools you want (several are fine), or observe to wait. Plain reply text reaches " + listeners() + " in chat; say can also use title or actionbar.";
     }
 
     protected String previously() {

@@ -121,6 +121,26 @@ public final class Compat {
         *///?}
     }
 
+    /** The entity a motion packet moves. */
+    public static int motionEntityId(net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket packet) {
+        //? if >=26.1 {
+        return packet.id();
+        //?} else {
+        /*return packet.getId();
+        *///?}
+    }
+
+    /** The motion a motion packet sets, in blocks per tick. */
+    public static net.minecraft.world.phys.Vec3 motion(net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket packet) {
+        //? if >=26.1 {
+        return packet.movement();
+        //?} else if >=1.21.9 {
+        /*return packet.getMovement();
+        *///?} else {
+        /*return new net.minecraft.world.phys.Vec3(packet.getXa(), packet.getYa(), packet.getZa());
+        *///?}
+    }
+
     /** Tells the server the (client-less) body has finished loading, like a real client's loaded packet. */
     public static void acceptPlayerLoad(ServerPlayer body) {
         //? if >=1.21.4 {

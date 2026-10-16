@@ -120,15 +120,19 @@ public final class Scheduler {
         }
     }
 
-    /** "label": X/N commands returned success; first failure. */
+    /** "label": X/N commands returned success (M changed nothing); first failure. */
     public static String summary(Run run) {
         int ok = 0;
+        int unchanged = 0;
         String firstError = null;
         for (StepResult r : run.results) {
             if (r.ok()) ok++;
-            else if (firstError == null) firstError = "step " + r.index() + ": " + r.text();
+            if (r.ok() && r.noOp()) unchanged++;
+            else if (!r.ok() && firstError == null) firstError = "step " + r.index() + ": " + r.text();
         }
-        return "\"" + run.label + "\": " + ok + "/" + run.total() + " commands returned success; " + run.results.size() + " executed"
+        return "\"" + run.label + "\": " + ok + "/" + run.total() + " commands returned success"
+                + (unchanged == 0 ? "" : " (" + unchanged + " of them changed nothing: the blocks already were so)")
+                + "; " + run.results.size() + " executed"
                 + (run.cancelled ? "; cancelled" : "") + (firstError == null ? "" : "; first error: " + truncate(firstError, 300));
     }
 
@@ -141,7 +145,7 @@ public final class Scheduler {
         StringBuilder out = new StringBuilder();
         for (StepResult r : run.results) {
             out.append("\n  step ").append(r.index()).append(": /").append(truncate(r.command(), 200)).append(" → ")
-                    .append(r.ok() ? "OK" : "FAILED: " + truncate(r.text(), 300));
+                    .append(r.ok() ? (r.noOp() ? "OK, changed nothing (already so): " + truncate(r.text(), 120) : "OK") : "FAILED: " + truncate(r.text(), 300));
         }
         return out.toString();
     }

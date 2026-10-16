@@ -312,10 +312,11 @@ public final class BuilderMind extends HostedMind {
                 return;
             }
             BuilderWorld.Geometry g = BuilderWorld.parse(response.content() == null ? "" : response.content());
+            logGeometry(label, attempt, response, g);
             if (g.ops().isEmpty()) {
                 reason = response.content() == null || response.content().isBlank() ? "the reply was empty"
                         : "no valid fill/setblock command was found (" + g.rejected().size() + " line(s) could not be used"
-                        + (g.rejected().isEmpty() ? "" : ", e.g. " + Scheduler.truncate(g.rejected().getFirst(), 120)) + ")";
+                        + (g.rejected().isEmpty() ? "" : ", e.g. " + examples(g.rejected())) + ")";
                 if (attempt < 2) {
                     geometry(what, w, d, h, reason, attempt + 1, label, at, facing, level, distance);
                     return;
@@ -330,10 +331,40 @@ public final class BuilderMind extends HostedMind {
                 for (int i = 0; i < commands.size(); i++) steps.add(new Scheduler.Step(i == 0 && layer > 0 ? LAYER_DELAY : 0, commands.get(i)));
             }
             BuilderWorld.Box box = placement.target();
-            String note = g.rejected().isEmpty() ? "" : " (" + g.rejected().size() + " unusable line(s) skipped)";
+            String note = g.rejected().isEmpty() ? "" : " (" + g.rejected().size() + " of " + (g.ops().size() + g.rejected().size())
+                    + " lines unusable and skipped, e.g. " + examples(g.rejected()) + ")";
             Outcome refused = edit(label + note, level, box.min().below(), box.max().above(CLEARANCE_ABOVE), steps);
             if (refused != null) report(refused.text(), false);
         }));
+    }
+
+    /** Up to three rejected geometry lines with the reason each was set aside. */
+    static String examples(List<String> rejected) {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < Math.min(3, rejected.size()); i++) {
+            if (i > 0) out.append("; ");
+            out.append('"').append(Scheduler.truncate(rejected.get(i), 140)).append('"');
+        }
+        return out.toString();
+    }
+
+    /** Passive record of the geometry call; the reply itself only with logPrompts, like prompts. */
+    private void logGeometry(String label, int attempt, LlmClient.Response response, BuilderWorld.Geometry g) {
+        if (log == null) return;
+        JsonObject entry = new JsonObject();
+        entry.addProperty("lane", "geometry");
+        entry.addProperty("companion", c.name());
+        entry.addProperty("build", label);
+        entry.addProperty("attempt", attempt);
+        entry.addProperty("usable_lines", g.ops().size());
+        entry.addProperty("rejected_lines", g.rejected().size());
+        if (!g.rejected().isEmpty()) entry.addProperty("rejected_examples", examples(g.rejected()));
+        if (LocalConfig.get().logPrompts && response.content() != null) entry.addProperty("reply", response.content());
+        entry.addProperty("latency_ms", response.latencyMs());
+        entry.addProperty("completion_tokens", response.completionTokens());
+        entry.addProperty("cost_usd", response.cost());
+        if (response.provider() != null) entry.addProperty("provider", response.provider());
+        log.write(entry);
     }
 
     private Outcome undo(String target) {

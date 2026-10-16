@@ -11,6 +11,7 @@ import com.voxelmind.local.action.DigAction;
 import com.voxelmind.local.action.DropAction;
 import com.voxelmind.local.action.EatAction;
 import com.voxelmind.local.action.EquipAction;
+import com.voxelmind.local.action.ExploreAction;
 import com.voxelmind.local.action.GatherAction;
 import com.voxelmind.local.action.GoToAction;
 import com.voxelmind.local.action.MineBlockAction;
@@ -20,12 +21,15 @@ import com.voxelmind.local.action.SmeltAction;
 import com.voxelmind.local.body.CompanionConnection;
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.world.Inv;
+import com.voxelmind.local.world.Names;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.monster.zombie.Zombie;
@@ -52,7 +56,7 @@ public class BodyGameTests {
         GameProfile profile = new GameProfile(UUID.randomUUID(), "TestBody" + COUNTER.incrementAndGet());
         CompanionPlayer body = new CompanionPlayer(server, level, profile);
         body.snapTo(abs.getX() + 0.5, abs.getY(), abs.getZ() + 0.5, 0f, 0f);
-        server.getPlayerList().placeNewPlayer(new CompanionConnection(), body, CommonListenerCookie.createInitial(profile, false));
+        server.getPlayerList().placeNewPlayer(new CompanionConnection(body), body, CommonListenerCookie.createInitial(profile, false));
         body.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
         body.setGameMode(GameType.SURVIVAL);
         return body;
@@ -410,4 +414,234 @@ public class BodyGameTests {
             helper.assertTrue(Inv.count(body, Items.DIRT) >= 3, "dirt picked up: " + Inv.count(body, Items.DIRT));
         });
     }
+
+    // ---- 0.4.3: building in a forest, cut-short walks under water, knockback ----
+
+    /** Fills the test area with stone from y=1 to {@code top}, leaving out the given cells. */
+    private static void stone(GameTestHelper helper, int top, java.util.function.Predicate<BlockPos> leaveOut) {
+        for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) for (int y = 1; y <= top; y++) {
+            BlockPos p = new BlockPos(x, y, z);
+            if (!leaveOut.test(p)) helper.setBlock(p, Blocks.STONE);
+        }
+    }
+
+    @GameTest(maxTicks = 2400, skyAccess = true)
+    public void shelterStandsOnTheGroundUnderABranch(GameTestHelper helper) {
+        floor(helper);
+        // A dark-oak-like branch above a corner of the footprint, open air below it: no ground to build on.
+        helper.setBlock(new BlockPos(6, 5, 6), Blocks.DARK_OAK_LOG);
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 1));
+        body.getInventory().add(new ItemStack(Items.OAK_PLANKS, 64));
+        BlockPos center = helper.absolutePos(new BlockPos(4, 0, 4));
+        BodyAction action = run(helper, body, new BuildShelterAction("build_shelter(branch)", "oak_planks", center.getX() + " " + center.getZ()));
+        finishWhen(helper, body, () -> {
+            assertDone(helper, action);
+            int walls = 0;
+            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
+                if ((Math.abs(dx) == 2 || Math.abs(dz) == 2) && helper.getLevel().getBlockState(center.offset(dx, 1, dz)).is(Blocks.OAK_PLANKS)) walls++;
+            }
+            helper.assertTrue(walls == 15, "wall ring at foot level has " + walls + " planks; " + action.result());
+            helper.assertTrue(helper.getLevel().getBlockState(center.offset(0, 3, 0)).is(Blocks.OAK_PLANKS), "no roof on the ground; " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 2400, skyAccess = true)
+    public void shelterNamesTheTreesInItsFootprint(GameTestHelper helper) {
+        floor(helper);
+        for (int y = 1; y <= 4; y++) helper.setBlock(new BlockPos(5, y, 5), Blocks.DARK_OAK_LOG);
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 1, 1));
+        body.getInventory().add(new ItemStack(Items.OAK_PLANKS, 64));
+        BlockPos center = helper.absolutePos(new BlockPos(4, 0, 4));
+        BodyAction action = run(helper, body, new BuildShelterAction("build_shelter(trunk)", "oak_planks", center.getX() + " " + center.getZ()));
+        BlockPos trunk = helper.absolutePos(new BlockPos(5, 1, 5));
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(action.finished(), "still running: " + action.progress());
+            helper.assertTrue(action.outcome() == BodyAction.Outcome.FAILED && action.result().contains("tree trunks or branches stand in the cells")
+                    && action.result().contains("dark_oak_log at " + Names.pos(trunk)), "the trunk is not named: " + action.outcome() + ": " + action.result());
+            helper.assertTrue(Inv.count(body, Items.OAK_PLANKS) == 64, "planks were placed: " + action.result());
+        });
+    }
+
+    @GameTest(maxTicks = 200, skyAccess = true)
+    public void shelterOverADeepTrenchIsBuiltBeyondTheCallLimit(GameTestHelper helper) {
+        floor(helper);
+        // Ground at y=5; the wall ring of the footprint stands in a trench down to the floor, so the walls take 7 blocks each.
+        stone(helper, 5, p -> p.getX() >= 2 && p.getX() <= 6 && p.getZ() >= 2 && p.getZ() <= 6
+                && (p.getX() == 2 || p.getX() == 6 || p.getZ() == 2 || p.getZ() == 6));
+        CompanionPlayer body = spawn(helper, new BlockPos(0, 6, 0));
+        for (int i = 0; i < 3; i++) body.getInventory().add(new ItemStack(Items.OAK_PLANKS, 64));
+        BlockPos center = helper.absolutePos(new BlockPos(4, 0, 4));
+        BodyAction action = run(helper, body, new BuildShelterAction("build_shelter(trench)", "oak_planks", center.getX() + " " + center.getZ()));
+        helper.runAtTickTime(40, () -> {
+            helper.assertTrue(!action.finished() || action.outcome() == BodyAction.Outcome.DONE, "ended: " + action.outcome() + ": " + action.result());
+            helper.assertTrue(action.progress().contains(" of 135 placed"), "plan: " + action.progress() + " " + action.result());
+            action.preempt("test over");
+            helper.getLevel().getServer().getPlayerList().remove(body);
+            helper.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 600)
+    public void placeBlocksNamesTheOccupiedCellAfterTheSecondPass(GameTestHelper helper) {
+        floor(helper);
+        helper.setBlock(new BlockPos(3, 1, 2), Blocks.STONE);
+        CompanionPlayer body = spawn(helper, new BlockPos(7, 1, 2));
+        body.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
+        java.util.List<PlaceBlocksAction.Entry> cells = new java.util.ArrayList<>();
+        for (BlockPos rel : new BlockPos[]{new BlockPos(3, 1, 2), new BlockPos(5, 1, 2), new BlockPos(5, 2, 2), new BlockPos(6, 2, 2)}) {
+            cells.add(new PlaceBlocksAction.Entry(helper.absolutePos(rel), "cobblestone"));
+        }
+        BodyAction action = run(helper, body, new PlaceBlocksAction("place_blocks(two passes)", cells));
+        BlockPos occupied = helper.absolutePos(new BlockPos(3, 1, 2));
+        finishWhen(helper, body, () -> {
+            assertDone(helper, action);
+            helper.assertBlockPresent(Blocks.COBBLESTONE, new BlockPos(6, 2, 2));
+            helper.assertTrue(action.result().contains("placed 3 of 4"), action.result());
+            helper.assertTrue(action.result().contains("1× occupied by stone at " + Names.pos(occupied)), "the occupied cell is not named: " + action.result());
+        });
+    }
+
+    /** Walks toward a cell and ends itself a few ticks into the walk: an action cut short mid-route. */
+    private static final class CutShortWalk extends BodyAction {
+        private final BlockPos to;
+
+        CutShortWalk(BlockPos to) {
+            super("cut_short", "cut_short()");
+            this.to = to;
+        }
+
+        @Override
+        protected void onStart(ActionContext ctx) {
+            nav.allowDig(false);
+            nav.navigate(to, p -> p.equals(to));
+        }
+
+        @Override
+        protected void onTick(ActionContext ctx) {
+            nav.tick();
+            if (ticks >= 3) done("ended early");
+        }
+    }
+
+    /** Stone up to y=5 with a 3×3 pool of water (x and z 2..4) down to the floor. */
+    private static boolean pool(BlockPos p) {
+        return p.getX() >= 2 && p.getX() <= 4 && p.getZ() >= 2 && p.getZ() <= 4;
+    }
+
+    @GameTest(maxTicks = 600, skyAccess = true)
+    public void anActionThatEndsItsWalkUnderWaterSwimsUpToAirFirst(GameTestHelper helper) {
+        floor(helper);
+        stone(helper, 5, BodyGameTests::pool);
+        for (int x = 2; x <= 4; x++) for (int z = 2; z <= 4; z++) for (int y = 1; y <= 5; y++) helper.setBlock(new BlockPos(x, y, z), Blocks.WATER);
+        CompanionPlayer body = spawn(helper, new BlockPos(4, 1, 4));
+        BodyAction action = run(helper, body, new CutShortWalk(helper.absolutePos(new BlockPos(2, 1, 2))));
+        finishWhen(helper, body, () -> {
+            assertDone(helper, action);
+            helper.assertTrue(!body.isUnderWater(), "the head is under water at " + body.blockPosition() + "; " + action.result());
+            helper.assertTrue(action.result().startsWith("ended early; then you swam up to air and stand at "), action.result());
+            helper.assertTrue(helper.relativePos(body.blockPosition()).getY() == 6, "not on the rim: " + helper.relativePos(body.blockPosition()));
+        });
+    }
+
+    @GameTest(maxTicks = 200, skyAccess = true)
+    public void exploreSaysHowDeepAndUnreachableTheFindIs(GameTestHelper helper) {
+        floor(helper);
+        stone(helper, 5, p -> p.equals(new BlockPos(6, 1, 6)));
+        helper.setBlock(new BlockPos(6, 1, 6), Blocks.WATER);
+        helper.spawn(EntityTypes.COD, new BlockPos(6, 1, 6));
+        CompanionPlayer body = spawn(helper, new BlockPos(1, 6, 1));
+        BodyAction action = run(helper, body, new ExploreAction("explore(cod)", "cod", "north", "nearby"));
+        finishWhen(helper, body, () -> {
+            assertDone(helper, action);
+            String r = action.result();
+            helper.assertTrue(r.contains("5 blocks below you") && r.contains("under water 1 block deep")
+                    && r.contains("no walking or swimming route to within reach of it was found"), "where it is is not said: " + r);
+        });
+    }
+
+    @GameTest(maxTicks = 300)
+    public void aPlayersHitKnocksTheBodyBack(GameTestHelper helper) {
+        floor(helper);
+        CompanionPlayer body = spawn(helper, new BlockPos(3, 1, 4));
+        ServerLevel level = helper.getLevel();
+        GameProfile profile = new GameProfile(UUID.randomUUID(), "Hitter" + COUNTER.incrementAndGet());
+        ServerPlayer hitter = new ServerPlayer(level.getServer(), level, profile, ClientInformation.createDefault());
+        BlockPos at = helper.absolutePos(new BlockPos(2, 1, 4));
+        hitter.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, -90f, 0f);
+        level.getServer().getPlayerList().placeNewPlayer(new CompanionConnection(hitter), hitter, CommonListenerCookie.createInitial(profile, false));
+        hitter.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
+        hitter.setGameMode(GameType.SURVIVAL);
+        double[] before = new double[2];
+        // Past the 60 ticks a freshly joined player cannot be hurt.
+        helper.runAtTickTime(80, () -> {
+            before[0] = body.getX();
+            float health = body.getHealth();
+            hitter.attack(body);
+            // Read at once: a well-fed body heals a light hit within ticks.
+            before[1] = health - body.getHealth();
+        });
+        helper.runAtTickTime(100, () -> {
+            double moved = body.getX() - before[0];
+            level.getServer().getPlayerList().remove(hitter);
+            level.getServer().getPlayerList().remove(body);
+            helper.assertTrue(before[1] > 0, "the hit did no damage");
+            helper.assertTrue(moved > 0.3, "the body was knocked back only " + moved + " blocks");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A sword fight against a zombie on open ground, from tick 70 on (a fresh body is unhurtable for 60 ticks): the
+     * damage the body takes, and the ticks it ends inside the zombie's melee range while its own attack recharges.
+     */
+    @GameTest(maxTicks = 1500, skyAccess = true)
+    public void fightsAZombieFromReachAndStepsBackWhileRecharging(GameTestHelper helper) {
+        floor(helper);
+        CompanionPlayer body = spawn(helper, new BlockPos(2, 1, 4));
+        body.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        ActionContext ctx = new ActionContext(() -> body, UUID.randomUUID());
+        new EquipAction("equip(iron_sword)", "iron_sword").start(ctx);
+        float[] damage = {0};
+        int[] inItsRange = {0};
+        body.setListener(new CompanionPlayer.BodyListener() {
+            @Override
+            public void onHurt(net.minecraft.world.damagesource.DamageSource source, float healthLost) {
+                damage[0] += healthLost;
+            }
+
+            @Override
+            public void onDeath(net.minecraft.world.damagesource.DamageSource source, net.minecraft.network.chat.Component deathMessage) {
+            }
+
+            @Override
+            public void onDirectMessage(net.minecraft.network.chat.Component sender, net.minecraft.network.chat.Component content,
+                                        net.minecraft.network.chat.ChatType.Bound chatType) {
+            }
+        });
+        Zombie[] zombie = {null};
+        BodyAction action = new AttackAction("attack(zombie)", "zombie");
+        double reach = Math.sqrt(2.04) - 0.6;
+        helper.onEachTick(() -> {
+            if (helper.getTick() == 70) {
+                zombie[0] = helper.spawn(EntityTypes.ZOMBIE, new BlockPos(6, 1, 4));
+                // A helmet keeps the zombie from burning under the open sky.
+                zombie[0].setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.LEATHER_HELMET));
+                action.start(ctx);
+            }
+            if (zombie[0] == null || action.finished()) return;
+            action.tick();
+            if (zombie[0].isAlive() && body.getAttackStrengthScale(0.5f) < 0.95f
+                    && zombie[0].getBoundingBox().inflate(reach, 0, reach).intersects(body.getBoundingBox())) inItsRange[0]++;
+        });
+        finishWhen(helper, body, () -> {
+            helper.assertTrue(zombie[0] != null && !zombie[0].isAlive(), "zombie still alive");
+            assertDone(helper, action);
+            helper.assertTrue(damage[0] < FIGHT_DAMAGE, "the body took " + damage[0] + " damage; " + action.result());
+            helper.assertTrue(inItsRange[0] <= FIGHT_TICKS_IN_RANGE, inItsRange[0] + " ticks inside the zombie's melee range while recharging");
+        });
+    }
+
+    /** One zombie hit (3 on normal difficulty) fails it: 0.4.2 took one in this fight and stood 2 ticks in its range; 0.4.3 none. */
+    private static final float FIGHT_DAMAGE = 3f;
+    private static final int FIGHT_TICKS_IN_RANGE = 1;
 }

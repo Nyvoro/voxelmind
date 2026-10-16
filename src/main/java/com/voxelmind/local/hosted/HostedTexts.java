@@ -33,7 +33,8 @@ public final class HostedTexts {
             affect. They expect a brief spoken reaction promptly and the first visible world action within about 30 seconds.
             DELIVERY: complete tool calls reach Minecraft as you emit them, while the rest of your response is still generating.
             PLAYER FEEDBACK: the player wants a brief spoken reaction and an announcement of what you choose to do, followed by a
-            report of what actually happened. A say call can reach them before your action calls finish generating. World
+            report of what actually happened. A say call can reach them before your action calls finish generating; plain
+            assistant reply text is also public and is delivered after generation. World
             command results return in [TIMELINE] and wake this same mind; they are the evidence for your follow-up, including
             partial changes or failures. IMPROVISATION: build the next situation from this place, these players, the creatures
             and objects around them, and what actually happened before. A useful scale is one nearby place, one or two memorable

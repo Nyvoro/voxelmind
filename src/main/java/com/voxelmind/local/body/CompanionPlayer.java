@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -23,6 +24,8 @@ import org.jspecify.annotations.Nullable;
 public class CompanionPlayer extends ServerPlayer {
     public final Motor motor = new Motor();
     private @Nullable BodyListener listener;
+    /** Motion the server sent this player's client (a hit's knockback), applied on the next tick as a client does. */
+    private @Nullable Vec3 receivedMotion;
 
     public CompanionPlayer(MinecraftServer server, ServerLevel level, GameProfile profile) {
         super(server, level, profile, ClientInformation.createDefault());
@@ -36,6 +39,11 @@ public class CompanionPlayer extends ServerPlayer {
         return listener;
     }
 
+    /** The server sent this body's client a new motion (a player's hit knocks a player back that way). */
+    public void receiveMotion(Vec3 motion) {
+        receivedMotion = motion;
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -43,6 +51,10 @@ public class CompanionPlayer extends ServerPlayer {
         // A real client confirms a dimension change (portal, end gateway, teleport) with its next packet; the
         // body has none, so it confirms itself. Otherwise it stays invulnerable and can never use a portal again.
         if (isChangingDimension()) hasChangedDimension();
+        if (receivedMotion != null) {
+            setDeltaMovement(receivedMotion);
+            receivedMotion = null;
+        }
         applyMotor();
         doTick();
         Compat.level(this).getChunkSource().move(this);

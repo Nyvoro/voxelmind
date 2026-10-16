@@ -5,12 +5,16 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
+
+import java.util.Locale;
 
 /**
  * survey: reads the ground around a point without moving. Reports, for every column,
  * the y of the top block one would stand on; a block built on that ground goes at y+1.
+ * Trees are not ground: under a trunk the ground below it is reported, marked T.
  */
 public final class SurveyAction extends BodyAction {
     private final String centerText;
@@ -39,30 +43,31 @@ public final class SurveyAction extends BodyAction {
         }
         StringBuilder out = new StringBuilder();
         out.append("ground around (").append(center.getX()).append(",").append(center.getZ()).append("), radius ").append(radius)
-                .append(": numbers are the y of the top solid block (stand on it at y+1; a block built on it goes at y+1); ")
-                .append("~ water surface, L lava, T tree/leaves on top. Rows north→south, columns west→east.\n");
+                .append(": numbers are the y of the top solid block that is not part of a tree (stand on it at y+1; a block built on it goes at y+1); ")
+                .append("~ water surface, L lava, T a tree trunk stands on this ground, ^ leaves or branches overhead. Rows north→south, columns west→east.\n");
         out.append("      ");
-        for (int dx = -radius; dx <= radius; dx++) out.append(String.format("%5d", center.getX() + dx));
+        for (int dx = -radius; dx <= radius; dx++) out.append(String.format(Locale.ROOT, "%5d", center.getX() + dx));
         out.append('\n');
         int min = Integer.MAX_VALUE;
         int max = Integer.MIN_VALUE;
         for (int dz = -radius; dz <= radius; dz++) {
             int z = center.getZ() + dz;
-            out.append(String.format("z=%-4d", z));
+            out.append(String.format(Locale.ROOT, "z=%-4d", z));
             for (int dx = -radius; dx <= radius; dx++) {
                 int x = center.getX() + dx;
                 if (!level.isLoaded(new BlockPos(x, center.getY(), z))) {
                     out.append("    ?");
                     continue;
                 }
-                int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
+                int top = ground(level, x, z);
                 BlockState surface = level.getBlockState(new BlockPos(x, top, z));
                 BlockState above = level.getBlockState(new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z) - 1, z));
                 String mark = "";
                 if (surface.getFluidState().is(FluidTags.WATER)) mark = "~";
                 else if (surface.getFluidState().is(FluidTags.LAVA)) mark = "L";
-                else if (above.is(BlockTags.LEAVES) || surface.is(BlockTags.LOGS)) mark = "T";
-                out.append(String.format("%5s", top + mark));
+                else if (level.getBlockState(new BlockPos(x, top + 1, z)).is(BlockTags.LOGS)) mark = "T";
+                else if (above.is(BlockTags.LEAVES) || above.is(BlockTags.LOGS)) mark = "^";
+                out.append(String.format(Locale.ROOT, "%5s", top + mark));
                 if (mark.isEmpty()) {
                     min = Math.min(min, top);
                     max = Math.max(max, top);
@@ -72,6 +77,22 @@ public final class SurveyAction extends BodyAction {
         }
         if (min != Integer.MAX_VALUE) out.append("dry ground ranges from y=").append(min).append(" to y=").append(max).append('.');
         done(out.toString());
+    }
+
+    /**
+     * The y of the top solid block of a column that is not part of a tree: below trunks, branches, leaves and open cells
+     * under them; a water or lava surface counts as the top.
+     */
+    public static int ground(Level level, int x, int z) {
+        int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
+        int y = top;
+        while (y > top - 64) {
+            BlockState state = level.getBlockState(new BlockPos(x, y, z));
+            boolean open = state.getCollisionShape(level, new BlockPos(x, y, z)).isEmpty() && state.getFluidState().isEmpty();
+            if (!open && !state.is(BlockTags.LOGS) && !state.is(BlockTags.LEAVES)) return y;
+            y--;
+        }
+        return top;
     }
 
     @Override

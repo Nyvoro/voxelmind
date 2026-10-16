@@ -2,6 +2,7 @@ package com.voxelmind.local.action;
 
 import com.voxelmind.local.body.CompanionPlayer;
 import com.voxelmind.local.body.Navigator;
+import com.voxelmind.local.body.PathFinder;
 import com.voxelmind.local.world.Names;
 import com.voxelmind.local.world.Placed;
 import com.voxelmind.local.world.Resources;
@@ -23,8 +24,12 @@ import java.util.function.Predicate;
 /**
  * explore: walks out in one compass direction (nearby ≈ 72 blocks, wide ≈ 110) and
  * stops early when the thing looked for comes into view. Walks only; never digs.
+ * What it found is reported with how far below or above it is, whether it is under
+ * water, and whether a walking or swimming route leads to it.
  */
 public final class ExploreAction extends BodyAction {
+    /** Search budget for the route check to what was found. */
+    private static final int ROUTE_NODES = 4000;
     private final String targetText;
     private final String directionText;
     private final boolean wide;
@@ -92,8 +97,9 @@ public final class ExploreAction extends BodyAction {
                 return;
             }
         }
-        if (found(ctx) != null) {
-            done(goalLabel + " is already in view: " + found(ctx));
+        Hit already = found(ctx);
+        if (already != null) {
+            done(goalLabel + " is already in view: " + describe(ctx, already));
             return;
         }
         nextLeg(ctx);
@@ -117,29 +123,56 @@ public final class ExploreAction extends BodyAction {
         legs++;
     }
 
-    private @Nullable String found(ActionContext ctx) {
+    /** What came into view: its description and where it is. */
+    private record Hit(String text, BlockPos pos) {}
+
+    private @Nullable Hit found(ActionContext ctx) {
         CompanionPlayer body = ctx.body();
         if (blockGoal != null) {
             // A block a player placed is not what explore looks out for: a log wall is no tree.
             BlockPos pos = Targets.nearestBlock(ctx.level(), body.blockPosition(),
                     (p, s) -> blockGoal.test(p, s) && !Placed.isPlaced(ctx.level(), p), 20);
-            return pos == null ? null : "closest at " + Names.pos(pos) + ", " + Math.round(Math.sqrt(pos.distSqr(body.blockPosition()))) + "m away";
+            return pos == null ? null : new Hit("closest at " + Names.pos(pos) + ", " + Math.round(Math.sqrt(pos.distSqr(body.blockPosition()))) + "m away", pos);
         }
         if (entityGoal != null) {
             Entity e = Targets.nearestEntity(body, entityGoal, 28);
-            return e == null ? null : Names.entity(e) + " [#" + e.getId() + "] at " + Names.pos(e.blockPosition()) + ", "
-                    + Math.round(body.distanceTo(e)) + "m away";
+            return e == null ? null : new Hit(Names.entity(e) + " [#" + e.getId() + "] at " + Names.pos(e.blockPosition()) + ", "
+                    + Math.round(body.distanceTo(e)) + "m away", e.blockPosition());
         }
         return null;
+    }
+
+    /**
+     * The hit with where it lies: how far below or above the body, how deep under water, and whether a walking or
+     * swimming route (no digging) leads to within reach of it.
+     */
+    private String describe(ActionContext ctx, Hit hit) {
+        ServerLevel level = ctx.level();
+        BlockPos feet = nav.feet();
+        StringBuilder text = new StringBuilder(hit.text());
+        int dy = hit.pos().getY() - feet.getY();
+        if (dy <= -2) text.append(", ").append(-dy).append(" blocks below you");
+        else if (dy >= 2) text.append(", ").append(dy).append(" blocks above you");
+        int depth = 0;
+        for (BlockPos p = hit.pos(); PathFinder.isWater(level, p) && depth < level.getHeight(); p = p.above()) depth++;
+        if (depth > 0) text.append(", under water ").append(depth).append(depth == 1 ? " block" : " blocks").append(" deep");
+        BlockPos target = hit.pos();
+        PathFinder.Result route = PathFinder.find(level, feet, target, f -> Moves.eyeDistance(f, target) <= 4.0, ROUTE_NODES);
+        if (!route.reachesGoal()) {
+            text.append("; no walking or swimming route to within reach of it was found");
+            if (depth > PathFinder.MAX_UNDER_WATER) text.append(" (routes never dive more than ").append(PathFinder.MAX_UNDER_WATER)
+                    .append(" steps in a row with the head under water)");
+        }
+        return text.toString();
     }
 
     @Override
     protected void onTick(ActionContext ctx) {
         CompanionPlayer body = ctx.body();
         if (ticks % 20 == 0 && (blockGoal != null || entityGoal != null)) {
-            String hit = found(ctx);
+            Hit hit = found(ctx);
             if (hit != null) {
-                done("explored " + dirName + " " + distance(body) + " blocks and found " + goalLabel + ": " + hit);
+                done("explored " + dirName + " " + distance(body) + " blocks and found " + goalLabel + ": " + describe(ctx, hit));
                 return;
             }
         }

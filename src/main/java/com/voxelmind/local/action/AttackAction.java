@@ -67,6 +67,11 @@ public final class AttackAction extends BodyAction {
         }
     }
 
+    /** The creature being fought now, or null before the action started. */
+    public @org.jspecify.annotations.Nullable LivingEntity target() {
+        return fighter == null ? null : fighter.target();
+    }
+
     private static String hp(ActionContext ctx) {
         return Math.round(ctx.body().getHealth()) + "/20";
     }

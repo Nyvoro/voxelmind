@@ -189,13 +189,16 @@ public final class Tools {
                 blocksParams(),
                 (a, call) -> new Body(new PlaceBlocksAction(call, entries(a))));
         action("build_shelter", "Build a 5×5 hut: walls two blocks high, a two-block door gap facing your owner, and a flat roof — "
-                        + "about 55 blocks of one carried material (planks, cobblestone, dirt…). Walls reach down to the ground where it dips. "
-                        + "Without center it is built about 4 blocks in front of you. Takes a while; the result reports what was placed." + WALKS,
+                        + "55 blocks of one carried material (planks, cobblestone, dirt…) on level ground; walls reach down to the ground where "
+                        + "it dips, which takes more. Trees are not ground: where tree trunks or branches stand in the hut's cells nothing is "
+                        + "built and the result names them. Without center it is built about 4 blocks in front of you. Takes a while; the "
+                        + "result reports what was placed." + WALKS,
                 params(opt("material", str("Block to build with; needed when you carry more than one suitable kind.")),
                         opt("center", str("\"x z\" of the hut's middle."))),
                 (a, call) -> new Body(new BuildShelterAction(call, s(a, "material"), s(a, "center"))));
-        action("survey", "Read the ground around a point without moving: a grid of the top solid block's y for every column "
-                        + "(stand on it at y+1; a block built on it goes at y+1), with water, lava and trees marked. Use it before building "
+        action("survey", "Read the ground around a point without moving: a grid of the top solid block's y for every column, trees "
+                        + "not counted as ground (stand on it at y+1; a block built on it goes at y+1), with water, lava, tree trunks and "
+                        + "leaves overhead marked. Use it before building "
                         + "or when the terrain matters. Radius 1-8, default 5.",
                 params(opt("center", str("\"x z\", \"x y z\" or \"here\" (default).")), opt("radius", intRange("Blocks around the center.", 1, 8))),
                 (a, call) -> new Body(new SurveyAction(call, s(a, "center"), i(a, "radius", 5))));

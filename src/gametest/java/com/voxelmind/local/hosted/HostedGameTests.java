@@ -22,6 +22,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.entity.EntityTypeTest;
+import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
@@ -47,7 +48,7 @@ public class HostedGameTests {
         ServerPlayer p = new ServerPlayer(server, level, profile, ClientInformation.createDefault());
         BlockPos abs = helper.absolutePos(rel);
         p.snapTo(abs.getX() + 0.5, abs.getY(), abs.getZ() + 0.5, 0f, 0f);
-        server.getPlayerList().placeNewPlayer(new CompanionConnection(), p, CommonListenerCookie.createInitial(profile, false));
+        server.getPlayerList().placeNewPlayer(new CompanionConnection(p), p, CommonListenerCookie.createInitial(profile, false));
         p.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
         p.setGameMode(GameType.CREATIVE);
         if (operator) op(server, p);
@@ -157,6 +158,60 @@ public class HostedGameTests {
         helper.succeed();
     }
 
+    @GameTest
+    public void rejectedGeometryLinesSayWhy(GameTestHelper helper) {
+        BuilderWorld.Geometry g = BuilderWorld.parse("""
+                fill 0 0 0 4 3 4 oak_planks hollow
+                setblock 2 0 0 oak_door[half=lower, facing=south]
+                # walls
+                fill 0 0 0 4 0 4 stone_bricks""");
+        helper.assertTrue(g.ops().size() == 1, "one usable line: " + g.ops());
+        helper.assertTrue(g.rejected().size() == 3, "three lines set aside: " + g.rejected());
+        helper.assertTrue(g.rejected().get(0).endsWith("(fill takes 7 values, this line has 8)"), "fill with a mode: " + g.rejected().get(0));
+        helper.assertTrue(g.rejected().get(1).endsWith("(setblock takes 4 values, this line has 5)"), "state with a space: " + g.rejected().get(1));
+        helper.assertTrue(g.rejected().get(2).endsWith("(not a fill or setblock command)"), "comment: " + g.rejected().get(2));
+        String examples = BuilderMind.examples(g.rejected());
+        helper.assertTrue(examples.contains("hollow (fill takes 7") && examples.contains("# walls (not a fill"), "the result names examples: " + examples);
+        helper.succeed();
+    }
+
+    @GameTest
+    public void aFillThatChangesNothingIsANoOpNotAFailure(GameTestHelper helper) {
+        floor(helper);
+        ServerLevel level = helper.getLevel();
+        BlockPos a = helper.absolutePos(new BlockPos(1, 1, 1));
+        BlockPos b = helper.absolutePos(new BlockPos(3, 2, 3));
+        String fill = "fill " + a.getX() + " " + a.getY() + " " + a.getZ() + " " + b.getX() + " " + b.getY() + " " + b.getZ() + " oak_planks";
+        Vec3 at = Vec3.atCenterOf(a);
+        CommandRunner.Result first = CommandRunner.runAt(level.getServer(), level, at, Vec2.ZERO, "Test", fill);
+        helper.assertTrue(first.ok() && !first.noOp(), "the first fill changes blocks: " + first);
+        CommandRunner.Result again = CommandRunner.runAt(level.getServer(), level, at, Vec2.ZERO, "Test", fill);
+        helper.assertTrue(again.ok() && again.noOp(), "the same fill again is ok and a no-op: " + again);
+        helper.assertTrue(again.text().contains("No blocks were filled"), "the server's words stay: " + again.text());
+        CommandRunner.Result bad = CommandRunner.runAt(level.getServer(), level, at, Vec2.ZERO, "Test", "setblock " + a.getX() + " " + a.getY() + " " + a.getZ() + " unicorn_block");
+        helper.assertTrue(!bad.ok() && !bad.noOp(), "a real error stays an error: " + bad);
+        Scheduler.Run run = new Scheduler.Run("e1", "fill twice", List.of(new Scheduler.Step(0, fill), new Scheduler.Step(0, fill)), level, r -> {});
+        run.results.add(new Scheduler.StepResult(0, fill, first.ok(), first.text(), first.noOp()));
+        run.results.add(new Scheduler.StepResult(1, fill, again.ok(), again.text(), again.noOp()));
+        String summary = Scheduler.summary(run);
+        helper.assertTrue(summary.contains("2/2 commands returned success (1 of them changed nothing: the blocks already were so)")
+                && !summary.contains("first error"), "summary: " + summary);
+        helper.succeed();
+    }
+
+    @GameTest
+    public void godPlainTextSpeaksLikeTheBuilders(GameTestHelper helper) {
+        floor(helper);
+        ServerPlayer owner = owner(helper, new BlockPos(3, 1, 3), true);
+        Companion god = bring(helper, owner, "god");
+        String turn = ((GodMind) god.hosted).turn("chat", System.currentTimeMillis());
+        helper.assertTrue(turn.contains("Plain reply text reaches the players in chat") && !turn.contains("Only say speaks"),
+                "the turn says where plain text goes: " + turn);
+        helper.assertTrue(HostedTexts.GOD_FRAME.contains("plain assistant reply text is also public"), "the frame says so too");
+        leave(helper, owner, god);
+        helper.succeed();
+    }
+
     // ---- sessions in the world ----
 
     @GameTest(maxTicks = 100)
@@ -225,6 +280,31 @@ public class HostedGameTests {
                     }
                     if (!helper.getLevel().getBlockState(p).isAir()) helper.fail("undo left a block at " + p);
                     if (Placed.of(level).entry(level.dimension(), p) != null) helper.fail("undo left an index entry at " + p);
+                }
+                leave(helper, owner, c);
+                helper.succeed();
+            }
+        });
+    }
+
+    @GameTest(maxTicks = 300)
+    public void builderFillOverTheSameBlocksIsNotAFailure(GameTestHelper helper) {
+        floor(helper);
+        ServerPlayer owner = owner(helper, new BlockPos(3, 1, 1), true);
+        Companion c = bring(helper, owner, "builder");
+        BuilderMind b = (BuilderMind) c.hosted;
+        JsonObject fill = args("anchor", "owner_front", "distance", 1, "width", 3, "depth", 2, "height", 2, "block", "minecraft:oak_planks");
+        helper.assertTrue(b.tool("fill", fill) == null, "the first fill runs");
+        int[] phase = {0};
+        helper.onEachTick(() -> {
+            if (phase[0] == 0 && timelineHas(c, "result", "12 blocks changed")) {
+                phase[0] = 1;
+                helper.assertTrue(b.tool("fill", fill) == null, "the same fill again runs");
+            } else if (phase[0] == 1 && timelineHas(c, "result", "0 blocks changed")) {
+                phase[0] = 2;
+                if (timelineHas(c, "result", "FAILED")) helper.fail("an unchanged fill was reported as failed: " + c.state.timeline.last(5));
+                if (!timelineHas(c, "result", "result of \"fill", "changed nothing: the blocks already were so")) {
+                    helper.fail("the receipt does not say the blocks already were so: " + c.state.timeline.last(5));
                 }
                 leave(helper, owner, c);
                 helper.succeed();

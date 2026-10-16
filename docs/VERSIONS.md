@@ -13,35 +13,35 @@ version, on Fabric API and on the Fabric loader listed below. Minecraft 1.21.x r
 
 | Minecraft | Java | Fabric loader (min) | Fabric API (min) | Mappings | Jar |
 |---|---|---|---|---|---|
-| 1.21 | 21 | 0.19.5 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.jar` |
-| 1.21.1 | 21 | 0.16.9 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.1.jar` |
-| 1.21.2 | 21 | 0.19.5 | 0.106.1+1.21.2 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.2.jar` |
-| 1.21.3 | 21 | 0.19.5 | 0.114.1+1.21.3 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.3.jar` |
-| 1.21.4 | 21 | 0.16.9 | 0.113.0+1.21.4 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.4.jar` |
-| 1.21.5 | 21 | 0.16.10 | 0.119.5+1.21.5 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.5.jar` |
-| 1.21.6 | 21 | 0.16.13 | 0.128.2+1.21.6 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.6.jar` |
-| 1.21.7 | 21 | 0.19.5 | 0.129.0+1.21.7 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.7.jar` |
-| 1.21.8 | 21 | 0.16.13 | 0.136.1+1.21.8 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.8.jar` |
-| 1.21.9 | 21 | 0.19.5 | 0.134.1+1.21.9 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.9.jar` |
-| 1.21.10 | 21 | 0.19.5 | 0.138.4+1.21.10 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.10.jar` |
-| 1.21.11 | 21 | 0.19.5 | 0.141.6+1.21.11 | Mojang, remapped | `voxelmind-local-0.4.2+1.21.11.jar` |
-| 26.1 | 25 | 0.19.5 | 0.145.1+26.1 | none (unobfuscated) | `voxelmind-local-0.4.2+26.1.jar` |
-| 26.1.1 | 25 | 0.19.5 | 0.145.4+26.1.1 | none (unobfuscated) | `voxelmind-local-0.4.2+26.1.1.jar` |
-| 26.1.2 | 25 | 0.19.5 | 0.155.2+26.1.2 | none (unobfuscated) | `voxelmind-local-0.4.2+26.1.2.jar` |
-| 26.2 | 25 | 0.19.5 | 0.159.0+26.2 | none (unobfuscated) | `voxelmind-local-0.4.2+26.2.jar` |
+| 1.21 | 21 | 0.19.5 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.jar` |
+| 1.21.1 | 21 | 0.16.9 | 0.116.12+1.21.1 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.1.jar` |
+| 1.21.2 | 21 | 0.19.5 | 0.106.1+1.21.2 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.2.jar` |
+| 1.21.3 | 21 | 0.19.5 | 0.114.1+1.21.3 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.3.jar` |
+| 1.21.4 | 21 | 0.16.9 | 0.113.0+1.21.4 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.4.jar` |
+| 1.21.5 | 21 | 0.16.10 | 0.119.5+1.21.5 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.5.jar` |
+| 1.21.6 | 21 | 0.16.13 | 0.128.2+1.21.6 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.6.jar` |
+| 1.21.7 | 21 | 0.19.5 | 0.129.0+1.21.7 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.7.jar` |
+| 1.21.8 | 21 | 0.16.13 | 0.136.1+1.21.8 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.8.jar` |
+| 1.21.9 | 21 | 0.19.5 | 0.134.1+1.21.9 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.9.jar` |
+| 1.21.10 | 21 | 0.19.5 | 0.138.4+1.21.10 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.10.jar` |
+| 1.21.11 | 21 | 0.19.5 | 0.141.6+1.21.11 | Mojang, remapped | `voxelmind-local-0.4.4+1.21.11.jar` |
+| 26.1 | 25 | 0.19.5 | 0.145.1+26.1 | none (unobfuscated) | `voxelmind-local-0.4.4+26.1.jar` |
+| 26.1.1 | 25 | 0.19.5 | 0.145.4+26.1.1 | none (unobfuscated) | `voxelmind-local-0.4.4+26.1.1.jar` |
+| 26.1.2 | 25 | 0.19.5 | 0.155.2+26.1.2 | none (unobfuscated) | `voxelmind-local-0.4.4+26.1.2.jar` |
+| 26.2 | 25 | 0.19.5 | 0.159.0+26.2 | none (unobfuscated) | `voxelmind-local-0.4.4+26.2.jar` |
 
 The Fabric API / loader versions are the ones of `voxelmind-mod/versions/*/gradle.properties`
 (Minecraft 1.21 uses the Fabric API build `0.116.12+1.21.1`, which also runs on 1.21). The mod is
 "client and server": it runs in the integrated or a dedicated server, so dedicated servers need Fabric API too.
 
-Verification status of 0.4.2 (10.10.2026; details below):
+Verification status of 0.4.3 (11.10.2026; details below):
 
 | Check | 1.21 .. 1.21.10 | 1.21.11 | 26.1, 26.1.1, 26.1.2 | 26.2 |
 |---|---|---|---|---|
 | Release jar builds, metadata checked (`tools/build-all.sh`) | yes | yes | yes | yes |
 | Production dedicated-server boot, remapped jar, all five mixins (`tools/smoke-servers.sh`) | yes | yes | yes | yes |
 | Client smoke: every screen, real body actions, summon after the owner went 300 blocks away (`tools/smoke-client.sh`) | 1.21.1 and 1.21.8 | yes | 0.4.0 only | yes |
-| 118 server game tests (`runGameTest`) | not available | yes | 26.1.2 with 48 of them during the review | yes |
+| 132 server game tests (`runGameTest`) | not available | yes | 26.1.2 with 48 of them during the review | yes |
 | Long client game test (`runClientGameTest`) | not available | not available | not available | yes |
 
 ## Build commands
@@ -62,7 +62,7 @@ export GRADLE_USER_HOME=V:/Android/Gradle
 bash tools/build-all.sh                      # or: bash tools/build-all.sh 1.21.1 26.2
 
 # 26.2 tests (26.2 is the default active project)
-./gradlew :26.2:runGameTest                  # 118 server game tests
+./gradlew :26.2:runGameTest                  # 132 server game tests
 ./gradlew :26.2:runClientGameTest            # the long client test with screenshots
 ./gradlew :26.2:runServer                    # dev server in voxelmind-local/run (port 25599, owner-bot scenarios)
 ./gradlew :26.2:build                        # jar + game tests
@@ -111,7 +111,7 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
 | Place | What differs |
 |---|---|
 | `tools/versioned-renames.gradle` | all text renames above (the file is the list; every rule block starts with the version that introduced the new spelling) |
-| `src/main/java/.../compat/Compat.java` | `assemble` (recipe result, >=26.1 vs 1.21.x registry argument), `ingredientItems`, `ingredients`, `shapedCells` (crafting recipes, 1.21.2 / 1.21.4 changes), `smeltInput`, `cookingTime`, `isFuel`, `burnDuration` (1.21.2), `texturedProfile` (authlib 7, 1.21.9), `acceptPlayerLoad` (>=1.21.4), `level(ServerPlayer)` (>=1.21.6), `loadPlayerData` (1.21.6 and 1.21.9 changes) |
+| `src/main/java/.../compat/Compat.java` | `assemble` (recipe result, >=26.1 vs 1.21.x registry argument), `ingredientItems`, `ingredients`, `shapedCells` (crafting recipes, 1.21.2 / 1.21.4 changes), `smeltInput`, `cookingTime`, `isFuel`, `burnDuration` (1.21.2), `texturedProfile` (authlib 7, 1.21.9), `acceptPlayerLoad` (>=1.21.4), `level(ServerPlayer)` (>=1.21.6), `loadPlayerData` (1.21.6 and 1.21.9 changes), `motionEntityId` and `motion` (the motion packet: `getXa/Ya/Za` before 1.21.9, `getMovement()` 1.21.9–1.21.11, record accessors from 26.1) |
 | `body/CompanionPlayer.java` | `hurtServer(level, source, damage)` from 1.21.2, `hurt(source, damage)` before |
 | `client/CompanionEditScreen.java` | persona box: `MultiLineEditBox.builder()` from 1.21.6; before, the constructor, and the 500-character limit is enforced by the value listener (a limit on the old box draws a second counter) |
 | `client/ModelPickerScreen.java` | row rendering/click handling: `renderContent` + `MouseButtonEvent` from 1.21.9; before, `render(index, top, left, ...)`, rows drawn at the row origin and a 250 ms double-click timer instead of the `doubleClick` flag |
@@ -138,7 +138,7 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
   The `VML-SMOKE body ...` lines are written to `build/client-smoke/<mc>/smoke-lines.txt`; apart from coordinates they are
   identical on all 16 versions. A render error would crash the client and fail the run. With `SMOKE_SHOTS=1` it also photographs
   each screen for visual comparison against 26.2.
-- **26.2 game tests**: `runGameTest` (118 server tests: body, tools, settings, hosted minds, one mind against a stub endpoint, doors, placed blocks) and `runClientGameTest`
+- **26.2 game tests**: `runGameTest` (132 server tests: body, tools, settings, hosted minds incl. command no-ops and geometry rejections, one mind against a stub endpoint, doors, placed blocks, building among trees, surfacing, knockback, melee, threat events) and `runClientGameTest`
   (one long client test with screenshots) - must stay green; they also run for 1.21.11 and 26.1 / 26.1.1 / 26.1.2
   (server tests). Older targets differ in `GameTestHelper` (Component messages instead of Strings from 1.21.11) and, below
   1.21.5, in how tests are registered; the client smoke covers the same body actions there.

@@ -84,11 +84,6 @@ public final class GodMind extends HostedMind {
     }
 
     @Override
-    protected boolean plainTextSpeaks() {
-        return false;
-    }
-
-    @Override
     protected List<ServerPlayer> audience() {
         if (c.state.guests) return humans();
         ServerPlayer host = host();

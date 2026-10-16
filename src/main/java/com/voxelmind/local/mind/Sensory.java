@@ -110,7 +110,7 @@ public final class Sensory {
         out.append(inv.isEmpty() ? "  empty\n" : inv);
 
         appendPeople(out, body, level, ownerId, ownerName);
-        appendEntities(out, body, level);
+        appendEntities(out, body, level, ownerId);
         appendBlocks(out, body, level);
 
         if (!bodyAction.isEmpty()) out.append("BODY ACTION: ").append(bodyAction).append('\n');
@@ -147,7 +147,16 @@ public final class Sensory {
         }
     }
 
-    private static void appendEntities(StringBuilder out, CompanionPlayer body, ServerLevel level) {
+    /** Whom a hostile mob targets, as ", targeting you" / ", targeting <name>"; empty when it targets no one. */
+    private static String targeting(Entity e, CompanionPlayer body, UUID ownerId) {
+        if (!(e instanceof net.minecraft.world.entity.Mob mob) || mob.getTarget() == null) return "";
+        LivingEntity t = mob.getTarget();
+        if (t == body) return ", targeting you";
+        if (t instanceof ServerPlayer p) return ", targeting " + p.getGameProfile().name() + (p.getUUID().equals(ownerId) ? " (your owner)" : "");
+        return ", targeting " + Names.entity(t) + " [#" + t.getId() + "]";
+    }
+
+    private static void appendEntities(StringBuilder out, CompanionPlayer body, ServerLevel level, UUID ownerId) {
         Vec3 me = body.position();
         List<Entity> near = level.getEntities(body, new AABB(body.blockPosition()).inflate(24), e -> e.isAlive() && !(e instanceof ServerPlayer));
         near.sort(Comparator.comparingDouble(body::distanceToSqr));
@@ -160,7 +169,7 @@ public final class Sensory {
             if (e instanceof Enemy && e instanceof LivingEntity living) {
                 if (threats.size() < 8) {
                     threats.add("  - " + Names.id(e.getType()) + " [#" + e.getId() + "] " + Math.round(d) + "m " + Names.direction(me, e.position())
-                            + " at " + Names.pos(e.blockPosition()) + ", HP " + Math.round(living.getHealth()));
+                            + " at " + Names.pos(e.blockPosition()) + ", HP " + Math.round(living.getHealth()) + targeting(e, body, ownerId));
                 }
             } else if (e instanceof ItemEntity item && d <= 16) {
                 String id = Names.id(item.getItem().getItem());
