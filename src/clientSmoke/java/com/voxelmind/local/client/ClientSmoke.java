@@ -120,6 +120,34 @@ public final class ClientSmoke implements ClientModInitializer {
         }));
         steps.add(new Step("edit screen (new companion)", 40, mc -> mc.gui.setScreen(new CompanionEditScreen(mc.gui.screen(), null))));
         steps.add(new Step("settings screen", 40, mc -> mc.gui.setScreen(new SettingsScreen(mc.gui.screen()))));
+        // Players on 1.21.10 reported that "AI from" stays on Player2: click it like a player, once per provider.
+        steps.add(new Step("settings: AI from goes through every provider", 20, mc -> {
+            List<String> seen = new ArrayList<>();
+            for (int i = 0; i < 7; i++) {
+                Screen current = mc.gui.screen();
+                net.minecraft.client.gui.components.CycleButton<?> cycle = null;
+                for (var child : current.children()) {
+                    if (child instanceof net.minecraft.client.gui.components.CycleButton<?> found) {
+                        cycle = found;
+                        break;
+                    }
+                }
+                if (cycle == null) throw new IllegalStateException("no AI from button on " + current);
+                seen.add(cycle.getMessage().getString());
+                double x = cycle.getX() + cycle.getWidth() / 2.0;
+                double y = cycle.getY() + cycle.getHeight() / 2.0;
+                //? if >=1.21.9 {
+                var event = new net.minecraft.client.input.MouseButtonEvent(x, y, new net.minecraft.client.input.MouseButtonInfo(0, 0));
+                current.mouseClicked(event, false);
+                current.mouseReleased(event);
+                //?} else {
+                /*current.mouseClicked(x, y, 0);
+                current.mouseReleased(x, y, 0);
+                *///?}
+            }
+            LOG.info("VML-SMOKE settings cycle {}", seen);
+            if (seen.stream().distinct().count() < 6) throw new IllegalStateException("AI from got stuck: " + seen);
+        }));
         steps.add(new Step("model picker", 80, mc -> mc.gui.setScreen(new ModelPickerScreen(mc.gui.screen(),
                 "https://openrouter.ai/api/v1", "", "deepseek/deepseek-v4-flash-0731", id -> { }))));
         steps.add(new Step("monitor screen stays open during the body tests", 5, mc -> {

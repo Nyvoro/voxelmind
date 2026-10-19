@@ -59,6 +59,10 @@ ext.versionedRenames = { List<Integer> v ->
         r["npc.villager.AbstractVillager"] = "npc.AbstractVillager"
         r["problem.message()"] = "problem.getMessage()"
         r['re:^(.*CycleButton\\.<\\w+>builder\\(.*), (\\w+)\\)$'] = '$1).withInitialValue($2)'
+        // Before 1.21.11 withInitialValue only finds the value's index in values already given; set before withValues it
+        // left the index at 0, so every click went to the second value ("AI from" stuck at Player2). Set it again after.
+        r[".withValues(Endpoint.values())"] = ".withValues(Endpoint.values()).withInitialValue(endpoint)"
+        r[".withValues(Sort.values())"] = ".withValues(Sort.values()).withInitialValue(sort)"
         r["import net.minecraft.server.permissions.Permissions;"] = ""
         r["import net.minecraft.server.permissions.LevelBasedPermissionSet;"] = ""
         r["LevelBasedPermissionSet.ADMIN"] = "4"

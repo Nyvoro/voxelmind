@@ -1,5 +1,11 @@
 # VoxelMind Local – Changelog
 
+## 0.4.7 (2026-10-19)
+
+**On Minecraft 1.21 to 1.21.10 you can choose every AI again.**
+
+- **"AI from" no longer sticks at Player2.** On Minecraft 1.21 to 1.21.10 the button in the AI settings went from VoxelMind Sparks to Player2 and then stayed there, so OpenRouter, Ollama, LM Studio and other servers could not be picked in the menu (the `/vml endpoint` command still worked). The same was true for the sort button in the model list. Both now go through all their choices. Minecraft 1.21.11 and 26.x were not affected. The client smoke test now clicks through the button on every version.
+
 ## 0.4.6 (2026-10-19)
 
 **Works next to Carpet, and companions show the outer layer of their skin.**
