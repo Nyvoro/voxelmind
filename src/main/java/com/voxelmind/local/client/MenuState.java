@@ -30,7 +30,7 @@ public final class MenuState {
                        @Nullable Activity activity, @Nullable Last last,
                        String skinSource, String skinValue, String skinSignature,
                        String previously, String knowingOwner, long memoryAgoMs, List<Row> timeline,
-                       String kind, String campaign, int chaos, boolean guests, String bodyType, int turns) {
+                       String kind, String campaign, int chaos, boolean guests, String bodyType, int turns, String brain) {
         public boolean hardcore() {
             return !hosted() && "hardcore".equals(mode);
         }
@@ -45,8 +45,12 @@ public final class MenuState {
         }
     }
 
+    /** A brain the server knows (mind/Brains), for the menu. */
+    public record BrainInfo(String id, String name, String version, String author, String description, String models, boolean builtin) {}
+
     public record View(boolean host, String model, String endpoint, boolean connected, String owner, boolean worldHardcore,
-                       String aiProblem, boolean aiOutOfJoules, List<Mate> mates, long receivedAt, boolean mayHost, boolean aiOutOfSparks) {
+                       String aiProblem, boolean aiOutOfJoules, List<Mate> mates, long receivedAt, boolean mayHost, boolean aiOutOfSparks,
+                       List<BrainInfo> brains) {
         public @Nullable Mate find(UUID id) {
             for (Mate m : mates) if (m.id().equals(id)) return m;
             return null;
@@ -99,7 +103,7 @@ public final class MenuState {
             for (JsonElement e : root.getAsJsonArray("companions")) mates.add(mate(e.getAsJsonObject()));
             view = new View(bool(root, "host"), str(root, "model"), str(root, "endpoint"), bool(root, "connected"),
                     str(root, "owner"), bool(root, "worldHardcore"), str(root, "aiProblem"), bool(root, "aiOutOfJoules"),
-                    List.copyOf(mates), System.currentTimeMillis(), bool(root, "mayHost"), bool(root, "aiOutOfSparks"));
+                    List.copyOf(mates), System.currentTimeMillis(), bool(root, "mayHost"), bool(root, "aiOutOfSparks"), brains(root));
         } catch (Exception e) {
             VoxelMindLocal.LOG.warn("Could not read the companion snapshot", e);
         }
@@ -130,7 +134,21 @@ public final class MenuState {
                 str(o, "previously"), str(o, "knowingOwner"), o.has("memoryAgoMs") ? num(o, "memoryAgoMs") : -1, List.copyOf(rows),
                 str(o, "kind").isEmpty() ? "companion" : str(o, "kind"), str(o, "campaign").isEmpty() ? "sandbox" : str(o, "campaign"),
                 o.has("chaos") ? (int) num(o, "chaos") : 3, !o.has("guests") || bool(o, "guests"),
-                str(o, "bodyType").isEmpty() ? "allay" : str(o, "bodyType"), (int) num(o, "turns"));
+                str(o, "bodyType").isEmpty() ? "allay" : str(o, "bodyType"), (int) num(o, "turns"),
+                str(o, "brain").isEmpty() ? "default" : str(o, "brain"));
+    }
+
+    private static List<BrainInfo> brains(JsonObject root) {
+        List<BrainInfo> out = new ArrayList<>();
+        if (root.has("brains") && root.get("brains").isJsonArray()) {
+            for (JsonElement e : root.getAsJsonArray("brains")) {
+                JsonObject b = e.getAsJsonObject();
+                out.add(new BrainInfo(str(b, "id"), str(b, "name"), str(b, "version"), str(b, "author"), str(b, "description"),
+                        str(b, "models"), bool(b, "builtin")));
+            }
+        }
+        if (out.isEmpty()) out.add(new BrainInfo("default", "VoxelMind Default", "", "VoxelMind", "", "", true));
+        return List.copyOf(out);
     }
 
     private static String str(JsonObject o, String k) {

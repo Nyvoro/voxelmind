@@ -93,6 +93,19 @@ public final class VmlCommand {
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .then(Commands.argument("account", StringArgumentType.greedyString())
                                         .executes(VmlCommand::skin))))
+                .then(Commands.literal("brain").executes(VmlCommand::brainList)
+                        .then(Commands.literal("list").executes(VmlCommand::brainList))
+                        .then(Commands.literal("guide").executes(VmlCommand::brainGuide))
+                        .then(Commands.literal("reload").requires(admin).executes(VmlCommand::brainReload))
+                        .then(Commands.literal("new").requires(admin)
+                                .then(Commands.argument("id", StringArgumentType.word()).executes(VmlCommand::brainNew)))
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .then(Commands.argument("brain", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> {
+                                            for (com.voxelmind.local.mind.Brain b : com.voxelmind.local.mind.Brains.all()) builder.suggest(b.id);
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(VmlCommand::brainSet))))
                 .then(Commands.literal("status").executes(VmlCommand::status))
                 .then(Commands.literal("stats").executes(ctx -> stats(ctx, null))
                         .then(Commands.literal("on").requires(admin).executes(ctx -> stats(ctx, true)))
@@ -268,6 +281,8 @@ public final class VmlCommand {
                 /vml player2                    free AI with a Player2 account (sign in with a code)
                 /vml endpoint openrouter|player2|voxelmind|ollama|lmstudio|<url> · /vml test · /vml reload
                 /vml stats [on|off]             anonymous daily count of which kind of AI service is used
+                /vml brain [<name> <brain>]      list the brains, or choose how a companion thinks
+                /vml brain new <id> · /vml brain reload · /vml brain guide   build your own brain
                 /vml forget <name>              delete it and its memory
                 Talk to it in normal chat; it hears you within 48 blocks.""");
         ctx.getSource().sendSuccess(() -> link("voxelmind_local.help.feature_request", "[Feature request on Discord]", com.voxelmind.local.VoxelMindLocal.FEATURE_REQUEST_URL)
@@ -404,6 +419,82 @@ public final class VmlCommand {
                 .append(Component.literal(path).withStyle(style -> style.withColor(ChatFormatting.AQUA).withUnderlined(true)
                         .withClickEvent(new ClickEvent.CopyToClipboard(path))
                         .withHoverEvent(new HoverEvent.ShowText(Component.literal("Copy the path")))));
+    }
+
+    static final String BRAIN_GUIDE_URL = "https://github.com/Nyvoro/voxelmind/blob/master/brains/README.md";
+
+    /** /vml brain: the brains this world knows, with what the last load skipped. */
+    private static int brainList(CommandContext<CommandSourceStack> ctx) {
+        info(ctx, "Brains (how a companion thinks; choose with /vml brain <companion> <brain>):");
+        for (com.voxelmind.local.mind.Brain b : com.voxelmind.local.mind.Brains.all()) {
+            String models = b.models.isEmpty() ? "" : " Recommended: " + String.join(", ", b.models) + ".";
+            info(ctx, "• " + b.id + ": " + b.label() + (b.builtin ? "" : " (yours)") + (b.description.isBlank() ? "" : ". " + b.description) + models);
+        }
+        for (String problem : com.voxelmind.local.mind.Brains.problems()) {
+            ctx.getSource().sendFailure(Component.literal("Skipped " + problem));
+        }
+        ctx.getSource().sendSuccess(() -> link("voxelmind_local.brain.guide_link", "[How to build your own brain]", BRAIN_GUIDE_URL), false);
+        return 1;
+    }
+
+    /** /vml brain <companion> <brain>: the brain a companion thinks with from its next decision on. */
+    private static int brainSet(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer owner = ctx.getSource().getPlayerOrException();
+        String name = StringArgumentType.getString(ctx, "name");
+        String id = StringArgumentType.getString(ctx, "brain").toLowerCase(Locale.ROOT);
+        Companion c = manager(ctx).find(owner.getUUID(), name);
+        if (c == null) return fail(ctx, "You have no companion named " + name + ".");
+        if (!"companion".equals(c.state.kind)) return fail(ctx, c.name() + " is a " + c.state.kind + "; Builders and Gods think with their own minds.");
+        if (!com.voxelmind.local.mind.Brains.exists(id)) {
+            return fail(ctx, "There is no brain " + id + ". Known: " + String.join(", ", com.voxelmind.local.mind.Brains.all().stream().map(b -> b.id).toList()) + ".");
+        }
+        com.voxelmind.local.mind.Brain brain = com.voxelmind.local.mind.Brains.get(id);
+        c.state.brain = brain.id;
+        manager(ctx).markDirty();
+        ok(ctx, c.name() + " thinks with " + brain.label() + " now." + (brain.models.isEmpty() ? "" : " It is made for: " + String.join(", ", brain.models) + "."));
+        return 1;
+    }
+
+    /** /vml brain new <id>: a full copy of the default brain to change, in the brains folder. */
+    private static int brainNew(CommandContext<CommandSourceStack> ctx) {
+        String id = StringArgumentType.getString(ctx, "id").toLowerCase(Locale.ROOT);
+        try {
+            java.nio.file.Path dir = com.voxelmind.local.mind.Brains.create(id);
+            String path = dir.toAbsolutePath().toString();
+            ok(ctx, "Brain " + id + " created as a copy of VoxelMind Default. Change its files (brain.json and the .md texts), then /vml brain reload.");
+            ctx.getSource().sendSuccess(() -> Component.literal("Folder: ").withStyle(ChatFormatting.GRAY)
+                    .append(Component.literal(path).withStyle(style -> style.withColor(ChatFormatting.AQUA).withUnderlined(true)
+                            .withClickEvent(new ClickEvent.CopyToClipboard(path))
+                            .withHoverEvent(new HoverEvent.ShowText(Component.literal("Copy the path"))))), false);
+            return 1;
+        } catch (java.io.IOException e) {
+            return fail(ctx, "Could not create the brain: " + e.getMessage());
+        }
+    }
+
+    /** /vml brain reload: reads the brains folder again; changed texts apply from the next decision on. */
+    private static int brainReload(CommandContext<CommandSourceStack> ctx) {
+        List<String> problems = com.voxelmind.local.mind.Brains.reload();
+        ok(ctx, com.voxelmind.local.mind.Brains.all().size() + " brains loaded. Changes apply from each companion's next decision.");
+        for (String problem : problems) ctx.getSource().sendFailure(Component.literal("Skipped " + problem));
+        return 1;
+    }
+
+    /** /vml brain guide: how to build a brain, with the prompt for an AI agent to copy. */
+    private static int brainGuide(CommandContext<CommandSourceStack> ctx) {
+        String prompt = com.voxelmind.local.mind.Brains.agentPrompt("<describe what your brain should do differently>");
+        info(ctx, """
+                Build your own brain: what your companion is told, how much it sees, which tools it gets and how it remembers.
+                1. /vml brain new <name> makes a copy of VoxelMind Default in the brains folder.
+                2. Change the files yourself, or let your AI agent do it (Claude Code, Codex, Cursor, ...): copy the prompt below and add your idea.
+                3. /vml brain reload, then /vml brain <companion> <name>. Watch it play, change, reload again.
+                4. Share it: post the folder on Discord, or send it as a pull request to github.com/Nyvoro/voxelmind (brains/<name>/).""");
+        ctx.getSource().sendSuccess(() -> Component.translatableWithFallback("voxelmind_local.brain.copy_prompt", "[Copy the prompt for your AI agent]")
+                .withStyle(style -> style.withColor(ChatFormatting.AQUA).withUnderlined(true)
+                        .withClickEvent(new ClickEvent.CopyToClipboard(prompt))
+                        .withHoverEvent(new HoverEvent.ShowText(Component.literal(prompt))))
+                .append(" ").append(link("voxelmind_local.brain.guide_link", "[Full guide]", BRAIN_GUIDE_URL)), false);
+        return 1;
     }
 
     /** /vml stats: whether the anonymous daily count is on; "on" and "off" change it for the whole installation. */

@@ -38,6 +38,19 @@ public final class Snapshots {
         JsonArray list = new JsonArray();
         for (Companion c : manager.ownedBy(viewer.getUUID())) list.add(companion(c, now));
         root.add("companions", list);
+        JsonArray brains = new JsonArray();
+        for (com.voxelmind.local.mind.Brain b : com.voxelmind.local.mind.Brains.all()) {
+            JsonObject o = new JsonObject();
+            o.addProperty("id", b.id);
+            o.addProperty("name", b.name);
+            o.addProperty("version", b.version);
+            o.addProperty("author", b.author);
+            o.addProperty("description", b.description);
+            o.addProperty("models", String.join(", ", b.models));
+            o.addProperty("builtin", b.builtin);
+            brains.add(o);
+        }
+        root.add("brains", brains);
         return root;
     }
 
@@ -93,6 +106,7 @@ public final class Snapshots {
             o.addProperty("fallenBy", c.state.fallenBy == null ? "" : c.state.fallenBy);
         }
         o.addProperty("skinSource", c.state.skinSource == null ? "" : c.state.skinSource);
+        o.addProperty("brain", c.state.brain == null ? com.voxelmind.local.mind.Brain.DEFAULT : c.state.brain);
         o.addProperty("skinValue", c.state.skinValue == null ? "" : c.state.skinValue);
         o.addProperty("skinSignature", c.state.skinSignature == null ? "" : c.state.skinSignature);
         if (c.hosted != null) hosted(c, o, now);

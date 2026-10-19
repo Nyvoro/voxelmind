@@ -146,10 +146,13 @@ public final class Mind {
         // keep_current_action is offered whenever there is something to keep: a running body action or a running wait.
         boolean keepable = c.actionRunning() || waitUntil > 0;
         PromptBuilder.Prompt prompt = PromptBuilder.decision(c, PromptBuilder.context(c, wokeBy, waitLine(now)), keepable);
-        JsonArray tools = Tools.decisionTools(keepable);
+        Brain brain = Brains.get(c.state.brain);
+        JsonArray tools = Tools.decisionTools(keepable, brain::allows);
         inFlight = true;
         LocalConfig config = LocalConfig.get();
-        LlmClient.chat(config.model, messages(prompt), tools, true, config.temperature, config.maxTokens, null)
+        double temperature = brain.temperature != null ? brain.temperature : config.temperature;
+        int maxTokens = brain.maxTokens != null ? brain.maxTokens : config.maxTokens;
+        LlmClient.chat(config.model, messages(prompt), tools, true, temperature, maxTokens, null)
                 .whenComplete((response, error) -> server.execute(() -> onDecision(wokeBy, prompt, response, error)));
     }
 
@@ -181,6 +184,7 @@ public final class Mind {
             logCall(wokeBy, prompt, null, error, "error");
             return;
         }
+        com.voxelmind.local.provider.UsageStats.decided(Brains.get(c.state.brain));
         // Text written next to the tool calls reaches no one. When the decision said nothing, that text may have been meant
         // as an answer; that it stayed unheard is then a fact for the next decision.
         String text = response.content() == null ? "" : response.content().trim();
@@ -207,7 +211,9 @@ public final class Mind {
                 continue;
             }
             if (!say) acted = true;
-            Tools.Choice choice = Tools.parse(call.name(), call.arguments());
+            // A tool the brain does not offer is not carried out, even when a model calls it anyway.
+            Tools.Choice choice = Brains.get(c.state.brain).allows(call.name()) ? Tools.parse(call.name(), call.arguments())
+                    : new Tools.Invalid(call.name(), "this tool is not part of the brain " + c.state.brain);
             spoke |= choice instanceof Tools.Say;
             applied.add(apply(choice, say));
             // A body call's line is spoken as the call is made, whatever became of the call itself.
@@ -328,6 +334,8 @@ public final class Mind {
         JsonObject entry = new JsonObject();
         entry.addProperty("lane", "decision");
         entry.addProperty("companion", c.name());
+        Brain brain = Brains.get(c.state.brain);
+        entry.addProperty("brain", brain.id + "@" + brain.version);
         entry.addProperty("woke_by", wokeBy);
         entry.addProperty("applied", applied);
         // The line that actually went out in this decision, for measurement (tools/e2e/say-do.cjs); absent when none did.

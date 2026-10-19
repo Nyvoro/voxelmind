@@ -87,7 +87,7 @@
   "voxelmind_local.menu.name.hint": "Cae, Ember, Sprout… (3-16 letters, digits, _)",
   "voxelmind_local.menu.name.fixed": "the name holds its memories",
   "voxelmind_local.menu.skin": "Look",
-  "voxelmind_local.menu.skin.hint": "Player name, PNG link or file.png (optional)",
+  "voxelmind_local.menu.skin.hint": "Account, PNG link or file.png",
   "voxelmind_local.menu.skin.default": "default skin",
   "voxelmind_local.menu.skin.current": "now: %s",
   "voxelmind_local.menu.character": "Character",
@@ -252,5 +252,11 @@
   "voxelmind_local.modmenu.feature_request": "Feature request",
   "voxelmind_local.modmenu.support": "Support on Ko-fi",
   "voxelmind_local.stats.notice": "So we can see which AI services players pick, the mod sends one anonymous count a day: the kind of service (VoxelMind Sparks, Player2, OpenRouter or a local model) and the mod and game version. No name, no ID, nothing from your chats.",
-  "voxelmind_local.stats.turn_off": "[Turn off]"
+  "voxelmind_local.stats.turn_off": "[Turn off]",
+  "voxelmind_local.menu.brain": "Brain",
+  "voxelmind_local.menu.brain.hint": "Click for the next brain. Build your own with /vml brain guide.",
+  "voxelmind_local.menu.brain.models": "Made for: %s",
+  "voxelmind_local.brain.guide_link": "[How to build your own brain]",
+  "voxelmind_local.brain.copy_prompt": "[Copy the prompt for your AI agent]",
+  "voxelmind_local.menu.brain.own": "yours"
 }

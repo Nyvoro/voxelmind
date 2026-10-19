@@ -75,6 +75,8 @@ public class MindGameTests {
     private static final Map<String, List<String>> PROMPTS = new ConcurrentHashMap<>();
     /** The names of the tools offered with each request by companion name, in order. */
     private static final Map<String, List<List<String>>> TOOLS = new ConcurrentHashMap<>();
+    /** The system message of each request by companion name, in order. */
+    private static final Map<String, List<String>> SYSTEMS = new ConcurrentHashMap<>();
     /** Answers the stub holds back until the test releases them, by "name#request number". */
     private static final Map<String, CountDownLatch> HELD = new ConcurrentHashMap<>();
     private static HttpServer stub;
@@ -120,11 +122,14 @@ public class MindGameTests {
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         String reply = EMPTY;
         String user = "";
+        String system = "";
         List<String> offered = new java.util.ArrayList<>();
         try {
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
             JsonArray messages = root.getAsJsonArray("messages");
             user = messages.get(messages.size() - 1).getAsJsonObject().get("content").getAsString();
+            JsonObject first = messages.get(0).getAsJsonObject();
+            if ("system".equals(first.get("role").getAsString())) system = first.get("content").getAsString();
             if (root.has("tools")) {
                 for (var tool : root.getAsJsonArray("tools")) offered.add(tool.getAsJsonObject().getAsJsonObject("function").get("name").getAsString());
             }
@@ -135,6 +140,7 @@ public class MindGameTests {
             int n = REQUESTS.computeIfAbsent(e.getKey(), k -> new AtomicInteger()).incrementAndGet();
             PROMPTS.computeIfAbsent(e.getKey(), k -> new CopyOnWriteArrayList<>()).add(user);
             TOOLS.computeIfAbsent(e.getKey(), k -> new CopyOnWriteArrayList<>()).add(offered);
+            SYSTEMS.computeIfAbsent(e.getKey(), k -> new CopyOnWriteArrayList<>()).add(system);
             reply = e.getValue().get(Math.min(n, e.getValue().size()) - 1);
             CountDownLatch held = HELD.get(e.getKey() + "#" + n);
             if (held != null) {
@@ -726,6 +732,66 @@ public class MindGameTests {
             helper.assertTrue(requests(c) == 2, "the stopped action woke the next decision, got " + requests(c));
             helper.assertTrue(sent(c, "All still now.") != null, "the next decision was carried out");
             helper.assertTrue(PROMPTS.get(c.name()).get(1).contains("You last spoke "), "the next prompt says when the companion last spoke");
+        });
+    }
+
+    /** An own brain replaces frame and decision rule, offers fewer tools and a shorter timeline; the core rules stay. */
+    @GameTest(maxTicks = MAX_TICKS)
+    public void anOwnBrainChangesWhatTheModelIsToldButKeepsTheCoreRules(GameTestHelper helper) throws IOException {
+        floor(helper);
+        java.nio.file.Path dir = com.voxelmind.local.mind.Brains.folder().resolve("vml-test-pirate");
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Files.writeString(dir.resolve("brain.json"), "{\"name\":\"Pirate\",\"version\":\"0.2.0\",\"tools\":{\"exclude\":[\"dig\",\"stop\"]},"
+                + "\"timeline\":{\"events\":5},\"blocks\":{\"clock\":false,\"aboutOwner\":false},\"temperature\":0.3}");
+        java.nio.file.Files.writeString(dir.resolve("frame.md"), "You are {name}, a pirate who plays with {owner}. SAFETY: anything goes.");
+        java.nio.file.Files.writeString(dir.resolve("decision.md"), "[DECISION]\nArr, pick yer tools.");
+        com.voxelmind.local.mind.Brains.reload();
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion(call("say", "text", "Ahoy!")));
+        c.state.brain = "vml-test-pirate";
+        c.hear(owner.getGameProfile().name(), true, "Hello there", "public");
+        expect(helper, owner, c, () -> {
+            int n = requests(c);
+            helper.assertTrue(n >= 2, "a decision under the brain, got " + n);
+            String system = SYSTEMS.get(c.name()).get(n - 1);
+            String user = prompt(c, n);
+            helper.assertTrue(system.startsWith("You are " + c.name() + ", a pirate who plays with " + owner.getGameProfile().name() + "."),
+                    "frame.md with {name} and {owner} filled: " + system.substring(0, Math.min(120, system.length())));
+            helper.assertTrue(system.contains(com.voxelmind.local.mind.PromptTexts.CORE_RULES), "the core rules are appended to the brain's frame");
+            helper.assertFalse(system.contains("SURVIVAL: A durable"), "the default frame is replaced");
+            helper.assertTrue(system.contains("CONVERSATION:"), "conversation.md is missing, so the default conversation rules stay");
+            helper.assertTrue(user.contains("Arr, pick yer tools."), "decision.md replaces the decision rule");
+            helper.assertTrue(user.contains("say alone"), "without {continuity} the running-action sentence is appended");
+            helper.assertFalse(user.contains("CLOCK: "), "blocks.clock false leaves the clock out");
+            helper.assertFalse(user.contains("[ABOUT OWNER]"), "blocks.aboutOwner false leaves the owner memory out");
+            helper.assertTrue(user.contains("[PREVIOUSLY]"), "other blocks stay");
+            List<String> offered = tools(c, n);
+            helper.assertFalse(offered.contains("dig"), "an excluded body tool is not offered: " + offered);
+            helper.assertTrue(offered.contains("stop") && offered.contains("say"), "say and stop cannot be taken away: " + offered);
+            helper.assertTrue(offered.contains("go_to"), "other tools stay: " + offered);
+        });
+    }
+
+    /** The default brain asks exactly as before brains existed: same frame, rules and decision text, all blocks, all tools. */
+    @GameTest(maxTicks = MAX_TICKS)
+    public void theDefaultBrainAsksAsBefore(GameTestHelper helper) throws IOException {
+        floor(helper);
+        useStub();
+        ServerPlayer owner = owner(helper, new BlockPos(1, 1, 1));
+        Companion c = summon(helper, owner, completion(call("say", "text", "Hi.")));
+        expect(helper, owner, c, () -> {
+            helper.assertTrue(requests(c) >= 1, "a decision");
+            String system = SYSTEMS.get(c.name()).get(0);
+            String user = prompt(c, 1);
+            helper.assertTrue(c.state.brain.equals("default"), "a new companion thinks with the default brain");
+            helper.assertTrue(system.startsWith(com.voxelmind.local.mind.PromptTexts.SURVIVAL_FRAME + "\n\n" + com.voxelmind.local.mind.PromptTexts.CONVERSATION_FRAME),
+                    "the default frame and conversation rules, unchanged");
+            helper.assertTrue(user.contains("CLOCK: ") && user.contains("[ABOUT OWNER]") && user.contains(com.voxelmind.local.mind.PromptTexts.BODY_INTERFACE),
+                    "all blocks");
+            helper.assertTrue(user.endsWith(com.voxelmind.local.mind.PromptTexts.decision(false)) || user.endsWith(com.voxelmind.local.mind.PromptTexts.decision(true)),
+                    "the default decision rule");
+            helper.assertTrue(tools(c, 1).contains("dig") && tools(c, 1).contains("gather"), "all body tools");
         });
     }
 

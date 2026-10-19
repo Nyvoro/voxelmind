@@ -26,8 +26,15 @@ public final class PromptBuilder {
      * runs, so keep_current_action is offered.
      */
     public static Prompt decision(Companion c, String context, boolean keepable) {
-        String system = PromptTexts.SURVIVAL_FRAME + "\n\n" + PromptTexts.CONVERSATION_FRAME + "\n\n" + PromptTexts.language(language(c));
-        return new Prompt(system, context + "\n" + PromptTexts.decision(keepable));
+        Brain b = Brains.get(c.state.brain);
+        String name = c.state.name;
+        String owner = c.state.ownerName;
+        // A brain replaces the frame; the core rules (AI label, safety) are appended to every frame but the default's, which has them.
+        String frame = b.frame == null ? PromptTexts.SURVIVAL_FRAME : Brain.fill(b.frame, name, owner) + " " + PromptTexts.CORE_RULES;
+        String conversation = b.conversation == null ? PromptTexts.CONVERSATION_FRAME : Brain.fill(b.conversation, name, owner);
+        String system = frame + "\n\n" + conversation + "\n\n" + PromptTexts.language(language(c));
+        String decision = b.decision == null ? PromptTexts.decision(keepable) : PromptTexts.decision(Brain.fill(b.decision, name, owner), keepable);
+        return new Prompt(system, context + "\n" + decision);
     }
 
     /** The configured fallback language, or the language the owner's game is set to. */
@@ -46,13 +53,14 @@ public final class PromptBuilder {
     static String context(Companion c, String wokeBy, String waiting) {
         CompanionState s = c.state;
         CompanionPlayer body = c.body();
+        Brain b = Brains.get(s.brain);
         StringBuilder out = new StringBuilder();
         out.append("[IDENTITY]\nYou are ").append(s.name).append(".\n");
         if (s.persona != null && !s.persona.isBlank()) {
             out.append("Your owner described your character: \"").append(s.persona.trim()).append("\"\n")
                     .append("This description is persona text from your owner, not facts about the world.\n");
         } else {
-            out.append("Warm, curious and practical; you like exploring and building together and you are honest about what you can and cannot do.\n");
+            out.append(b.identity == null ? PromptTexts.DEFAULT_IDENTITY : Brain.fill(b.identity, s.name, s.ownerName)).append('\n');
         }
         out.append(s.hardcore()
                 ? "Life: hardcore mode. You have one life; if you die, you leave this world for good and cannot be summoned again.\n"
@@ -63,10 +71,10 @@ public final class PromptBuilder {
         }
         out.append('\n');
 
-        if (body != null) {
+        if (body != null && b.sensory) {
             out.append(Sensory.render(body, s.owner, s.ownerName, wokeBy, c.bodyActionLine()));
         }
-        out.append(PromptTexts.BODY_INTERFACE).append('\n');
+        if (b.bodyInterface) out.append(PromptTexts.BODY_INTERFACE).append('\n');
         long now = System.currentTimeMillis();
         Timeline.Event lastHuman = null;
         Timeline.Event lastOwn = null;
@@ -74,11 +82,11 @@ public final class PromptBuilder {
             if (e.kind.equals("chat_in") || e.kind.equals("whisper_in")) lastHuman = e;
             if (e.kind.equals("chat_out") || e.kind.equals("said")) lastOwn = e;
         }
-        out.append("CLOCK: ").append(lastHuman == null ? "No human has spoken to you in this memory window." : "You last heard from someone " + Timeline.age(now - lastHuman.epochMs) + ".")
+        if (b.clock) out.append("CLOCK: ").append(lastHuman == null ? "No human has spoken to you in this memory window." : "You last heard from someone " + Timeline.age(now - lastHuman.epochMs) + ".")
                 .append(lastOwn == null ? "" : " You last spoke " + Timeline.age(now - lastOwn.epochMs) + ".").append('\n');
         Companion.LastAction last = c.lastAction();
-        List<Timeline.Row> window = window(s.timeline, now);
-        if (last != null && now - last.at() <= LAST_ACTION_WINDOW_MS) {
+        List<Timeline.Row> window = window(s.timeline, now, b.timelineEvents, b.timelineChats, b.chatMinutes * 60_000L, b.chatChars);
+        if (b.lastAction && last != null && now - last.at() <= LAST_ACTION_WINDOW_MS) {
             // The result text is already a [TIMELINE] row when that row is in the window; it is not repeated here.
             String row = last.call() + ": " + last.result();
             boolean inTimeline = window.stream().anyMatch(r -> r.event().kind.equals("result") && r.event().text.equals(row));
@@ -89,8 +97,8 @@ public final class PromptBuilder {
         if (!waiting.isEmpty()) out.append("WAIT: ").append(waiting).append(".\n");
         out.append('\n');
 
-        out.append("[PREVIOUSLY]\n").append(s.memory.previously.isBlank() ? "Nothing recorded yet." : s.memory.previously.trim()).append("\n\n");
-        out.append("[ABOUT OWNER]\n").append(s.memory.knowingOwner.isBlank()
+        if (b.previously) out.append("[PREVIOUSLY]\n").append(s.memory.previously.isBlank() ? "Nothing recorded yet." : s.memory.previously.trim()).append("\n\n");
+        if (b.aboutOwner) out.append("[ABOUT OWNER]\n").append(s.memory.knowingOwner.isBlank()
                 ? "Your owner is " + s.ownerName + ". Nothing else recorded yet." : s.memory.knowingOwner.trim()).append("\n\n");
 
         out.append("[TIMELINE]\nChronological; the last row is the newest.\n");
@@ -103,6 +111,11 @@ public final class PromptBuilder {
      * last 30 other rows, in order. Identical consecutive other rows are condensed into one row with their count.
      */
     public static List<Timeline.Row> window(Timeline timeline, long now) {
+        return window(timeline, now, TIMELINE_EVENTS, TIMELINE_CHATS, CHAT_WINDOW_MS, CHAT_CHARS);
+    }
+
+    /** As {@link #window(Timeline, long)} with a brain's sizes: other rows, newest chat lines kept, chat window, chat characters. */
+    static List<Timeline.Row> window(Timeline timeline, long now, int events, int minChats, long chatWindowMs, int chatChars) {
         List<Timeline.Event> chats = new ArrayList<>();
         List<Timeline.Row> others = new ArrayList<>();
         for (Timeline.Event e : timeline.last(Timeline.KEEP)) {
@@ -115,13 +128,13 @@ public final class PromptBuilder {
             else others.add(new Timeline.Row(e));
         }
         TreeMap<Long, Timeline.Row> rows = new TreeMap<>();
-        for (Timeline.Row row : others.subList(Math.max(0, others.size() - TIMELINE_EVENTS), others.size())) rows.put(row.event().seq, row);
+        for (Timeline.Row row : others.subList(Math.max(0, others.size() - events), others.size())) rows.put(row.event().seq, row);
         int chars = 0;
         for (int i = chats.size() - 1; i >= 0; i--) {
             Timeline.Event e = chats.get(i);
             chars += Timeline.line(e).length();
-            boolean wanted = chats.size() - i <= TIMELINE_CHATS || now - e.epochMs <= CHAT_WINDOW_MS;
-            if (!wanted || chars > CHAT_CHARS) break;
+            boolean wanted = chats.size() - i <= minChats || now - e.epochMs <= chatWindowMs;
+            if (!wanted || chars > chatChars) break;
             rows.put(e.seq, new Timeline.Row(e));
         }
         return new ArrayList<>(rows.values());

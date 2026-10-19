@@ -6,7 +6,8 @@ Thanks for wanting to make VoxelMind better. The code is open (MIT) so you can r
 
 This repository is the core of the mod. It is maintained by Nyvoro UG, and only the maintainers merge into it, so that every release stays stable on all 16 Minecraft versions. The rule for contributions is the same as for any "clean core": extend through the defined places instead of bending the core.
 
-- **Best:** changes that fit the existing places: a new body tool in `tool/`, a better perception line in `mind/Sensory`, a translation in `lang/`, a fix with a game test.
+- **Easiest:** a brain (how a companion thinks: prompts, context, tools, memory). It is data only, no Java; see `brains/README.md`. A pull request adds `brains/<id>/`.
+- **Best:** code changes that fit the existing places: a new body tool in `tool/`, a better perception line in `mind/Sensory`, a translation in `lang/`, a fix with a game test.
 - **Welcome, but talk first:** new kinds of AI beings, new providers, new menus. Open an issue or post in the Discord feature-request channel before you write a lot of code.
 - **Not for the core:** changes that only one server needs. Keep those in your fork or, later, in an addon.
 

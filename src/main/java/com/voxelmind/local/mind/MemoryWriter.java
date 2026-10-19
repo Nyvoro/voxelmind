@@ -40,6 +40,8 @@ public final class MemoryWriter {
     public void tick(Companion c, MinecraftServer server, @Nullable DecisionLog log) {
         long now = System.currentTimeMillis();
         if (inFlight || now < retryAt || now - lastRunAt < MIN_INTERVAL_MS) return;
+        // A brain can do without the long-term memory rewrite.
+        if (!Brains.get(c.state.brain).memory) return;
         if (c.state.timeline.lastSeq() - c.state.memory.cursor < BATCH) return;
         compact(c, server, log, null);
     }
@@ -55,7 +57,8 @@ public final class MemoryWriter {
         if (rows.isEmpty()) return;
         String owner = s.ownerName;
         String prefix = PromptTexts.memoryPrefix(s.name, owner, s.memory.previously, s.memory.knowingOwner);
-        String suffix = PromptTexts.memorySuffix(s.name, owner, MAX_PREVIOUSLY, MAX_KNOWING)
+        Brain brain = Brains.get(s.brain);
+        String suffix = PromptTexts.memorySuffix(s.name, owner, MAX_PREVIOUSLY, MAX_KNOWING, brain.memoryGuide == null ? PromptTexts.MEMORY_GUIDE : brain.memoryGuide)
                 + (tooLong == null ? "" : "\n" + tooLong);
         StringBuilder transcript = new StringBuilder();
         long lastIncluded = s.memory.cursor;

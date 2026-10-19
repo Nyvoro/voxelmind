@@ -36,6 +36,11 @@ abstract class PanelScreen extends Screen {
         return Component.translatable("voxelmind_local.menu." + key, args);
     }
 
+    /** Panel width; the default is {@link #PANEL_WIDTH}. Never wider than the screen allows. */
+    protected int panelWidth() {
+        return PANEL_WIDTH;
+    }
+
     /** Panel height; the default fills the screen with a small margin. */
     protected int panelHeight() {
         return height - 16;
@@ -44,8 +49,9 @@ abstract class PanelScreen extends Screen {
     @Override
     protected final void init() {
         int h = Math.min(panelHeight(), height - 8);
-        left = width / 2 - PANEL_WIDTH / 2;
-        right = left + PANEL_WIDTH;
+        int w = Math.min(panelWidth(), width - 8);
+        left = width / 2 - w / 2;
+        right = left + w;
         top = Math.max(4, (height - h) / 2);
         bottom = top + h;
         MenuState.request();

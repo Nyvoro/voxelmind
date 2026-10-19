@@ -1,0 +1,11 @@
+{
+  "name": "VoxelMind Default",
+  "version": "0.5.0",
+  "author": "VoxelMind",
+  "description": "Every rule, the full timeline and memory. For strong models.",
+  "models": [
+    "voxelmind/standard",
+    "deepseek/deepseek-v4-flash-0731"
+  ],
+  "minMod": "0.5.0"
+}

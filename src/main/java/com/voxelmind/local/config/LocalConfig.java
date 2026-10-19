@@ -84,6 +84,11 @@ public final class LocalConfig {
     public String usageStatsDay = "";
     /** Optional own MineSkin API key for signing own skin PNGs; empty uses MineSkin without a key (about 10 skins a minute). */
     public String mineskinKey = "";
+    /** UTC day this installation first ran this version of the config; only its age in steps goes into the usage count. */
+    public String installedDay = "";
+    /** UTC day of {@link #usageBrainMinutes}: minutes with at least one decision, per brain (shipped ones by id, others "custom"). */
+    public String usageBrainDay = "";
+    public java.util.Map<String, Integer> usageBrainMinutes = new java.util.HashMap<>();
 
     public static LocalConfig get() {
         return current;
@@ -114,6 +119,10 @@ public final class LocalConfig {
         }
         current = loaded != null ? loaded : new LocalConfig();
         migrate(current);
+        if (current.installedDay == null || current.installedDay.isBlank()) {
+            current.installedDay = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
+        }
+        if (current.usageBrainMinutes == null) current.usageBrainMinutes = new java.util.HashMap<>();
         save();
     }
 

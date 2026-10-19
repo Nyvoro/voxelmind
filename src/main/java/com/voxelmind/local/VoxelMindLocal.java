@@ -31,9 +31,11 @@ public final class VoxelMindLocal implements ModInitializer {
         try {
             // Own skin PNGs go here (/vml skin <name> <file.png>); made at start so players find it.
             java.nio.file.Files.createDirectories(com.voxelmind.local.companion.Skins.folder());
+            java.nio.file.Files.createDirectories(com.voxelmind.local.mind.Brains.folder());
         } catch (java.io.IOException e) {
-            LOG.warn("Could not create {}", com.voxelmind.local.companion.Skins.folder(), e);
+            LOG.warn("Could not create the skins or brains folder", e);
         }
+        com.voxelmind.local.mind.Brains.reload();
         com.voxelmind.local.net.MenuPayloads.register();
         com.voxelmind.local.net.Speech.register();
         com.voxelmind.local.hosted.HostedEvents.register();

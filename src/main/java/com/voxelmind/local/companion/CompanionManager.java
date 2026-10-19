@@ -82,6 +82,8 @@ public final class CompanionManager {
     }
 
     public static void stop() {
+        // The day's minutes per brain for the usage count are written now and then; the stop writes the rest.
+        com.voxelmind.local.config.LocalConfig.save();
         if (instance != null) {
             instance.shutdown();
             instance = null;

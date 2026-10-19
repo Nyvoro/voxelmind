@@ -35,6 +35,8 @@ public final class CompanionState {
     public long createdAt;
     /** Borrowed skin (signed textures property from Mojang), or empty for the default skin. */
     public String skinSource = "";
+    /** The brain this companion thinks with (mind/Brains); an unknown one falls back to the default. */
+    public String brain = com.voxelmind.local.mind.Brain.DEFAULT;
     public String skinValue = "";
     public String skinSignature = "";
 

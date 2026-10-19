@@ -53,6 +53,13 @@ Minecraft → code observes and condenses facts → LLM sees facts, conversation
 
 Only to the AI service the player picks, to Mojang when a companion borrows an account's skin, to MineSkin when it wears an own PNG (the image only), to the Minecraft Wiki when a Builder looks something up, and one anonymous count a day to `api.voxel-mind.com/v1/ping` (`provider/UsageStats`: kind of AI service, mod and game version, nothing else; told to the host before the first count, off with `/vml stats off` or `"usageStats": false`; dev runs never send it). The totals are public at `api.voxel-mind.com/v1/stats`.
 
+## Brains
+
+How a companion thinks (prompt frames, context blocks, timeline size, offered tools, temperature, memory guidance) is a **brain**:
+data in `assets/voxelmind_local/brains/<id>/` (shipped: `default`, `lite`) or `<gameDir>/voxelmind-local/brains/<id>/` (own ones),
+loaded by `mind/Brains`, applied in `PromptBuilder`, `Mind` and `MemoryWriter`. The core rules (AI label, safety) are appended to
+every brain's frame. The format and the workflow, written for people and AI agents: `brains/README.md`.
+
 ## Contributing
 
 See `CONTRIBUTING.md`: the core is maintained by Nyvoro UG; changes come in as pull requests.

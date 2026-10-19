@@ -1,5 +1,15 @@
 # VoxelMind Local – Changelog
 
+## 0.5.0 (2026-10-19)
+
+**Brains: choose how a companion thinks, or build your own, with your AI agent if you like.**
+
+- **Brains.** A brain decides what a companion's model is told (frame, conversation rules, decision rule, default character, memory guidance), which context blocks and how much of the recent timeline it sees, which body tools it gets, and the temperature. Pick one per companion in the menu (the new "Brain" row when you create or edit a companion) or with `/vml brain <companion> <brain>`. `/vml brain` lists them.
+  - **VoxelMind Default** is the brain companions had so far, unchanged to the character.
+  - **VoxelMind Lite** is new: shorter and plainer rules, a shorter timeline and a lower temperature, for small local models (about 8B to 20B in Ollama or LM Studio). It also tells the model when to use gather and when mine_block.
+- **Build your own.** `/vml brain new <name>` creates a complete copy of the default in `.minecraft/voxelmind-local/brains/<name>/` (a `brain.json` and a few text files). Change it yourself or let an AI agent do it: `/vml brain guide` copies a ready prompt for Claude Code, Codex or Cursor. `/vml brain reload` applies changes while you play. A brain is data only; no code runs from it. The AI label and the safety rule are added by the mod to every brain and cannot be removed. The full format is in `brains/README.md` of the repository (github.com/Nyvoro/voxelmind); share a brain on Discord or as a pull request.
+- **Anonymous count, two more steps** (off with `/vml stats off` as before): how long ago the installation started (first day, 1 to 7, 8 to 30 or more than 30 days; the date stays on your PC) with the day's count, and once a day for the previous day which brain companions played with (shipped brains by name, your own as "custom") and a step of minutes played (1 to 15, 15 to 60, 60+). This shows which brain keeps people playing; the best one can become the default.
+
 ## 0.4.7 (2026-10-19)
 
 **On Minecraft 1.21 to 1.21.10 you can choose every AI again.**

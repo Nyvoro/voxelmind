@@ -237,12 +237,17 @@ public final class Tools {
      * ({@code keepable}). It comes last, so both variants share the same tool prefix for the provider's prompt cache.
      */
     public static JsonArray decisionTools(boolean keepable) {
+        return decisionTools(keepable, name -> true);
+    }
+
+    /** The decision tools a brain offers: {@code allowed} decides per tool name (a brain cannot take away say, stop, wait and keep). */
+    public static JsonArray decisionTools(boolean keepable, java.util.function.Predicate<String> allowed) {
         JsonArray out = new JsonArray();
         for (Spec spec : ACTION.values()) {
-            if (spec.name().equals("keep_current_action")) continue;
+            if (spec.name().equals("keep_current_action") || !allowed.test(spec.name())) continue;
             out.add(schema(spec, true));
         }
-        for (Spec spec : SPEECH.values()) out.add(schema(spec, false));
+        for (Spec spec : SPEECH.values()) if (allowed.test(spec.name())) out.add(schema(spec, false));
         if (keepable) out.add(schema(ACTION.get("keep_current_action"), true));
         return out;
     }

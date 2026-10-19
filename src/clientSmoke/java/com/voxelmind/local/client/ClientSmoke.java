@@ -70,6 +70,10 @@ public final class ClientSmoke implements ClientModInitializer {
             // One tick-count before the next step, so tools/capture-shots.ps1 can photograph the open screen.
             if (ticksLeft == SHOT_TICKS_BEFORE_NEXT && index >= 0 && steps.get(index).waitTicks() >= 20) {
                 LOG.info("VML-SMOKE shot {}", steps.get(index).name());
+                //? if >=26.2 {
+                // The game's own picture of the open screen (F2, into run/screenshots), whatever window lies on top.
+                if (System.getenv("SMOKE_SHOTS") != null) net.minecraft.client.Screenshot.grab(mc, false);
+                //?}
             }
             ticksLeft--;
             return;
@@ -119,6 +123,10 @@ public final class ClientSmoke implements ClientModInitializer {
             mc.gui.setScreen(new CompanionEditScreen(mc.gui.screen(), mate));
         }));
         steps.add(new Step("edit screen (new companion)", 40, mc -> mc.gui.setScreen(new CompanionEditScreen(mc.gui.screen(), null))));
+        steps.add(new Step("edit screen: brain list open", 40, mc -> {
+            if (!(mc.gui.screen() instanceof CompanionEditScreen edit)) throw new IllegalStateException("no edit screen");
+            edit.openBrainList();
+        }));
         steps.add(new Step("settings screen", 40, mc -> mc.gui.setScreen(new SettingsScreen(mc.gui.screen()))));
         // Players on 1.21.10 reported that "AI from" stays on Player2: click it like a player, once per provider.
         steps.add(new Step("settings: AI from goes through every provider", 20, mc -> {

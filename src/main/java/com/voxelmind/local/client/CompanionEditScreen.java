@@ -52,6 +52,11 @@ public final class CompanionEditScreen extends PanelScreen {
     private int kindY;
     private int nameY;
     private int lookY;
+    /** The brain row's top, or -1 when this kind has none (Builder and God think with their own hosted minds). */
+    private int brainY = -1;
+    private String brain;
+    /** The brain list is open below its field; it then takes every click until something is picked or it is closed. */
+    private boolean brainOpen;
     private int characterY;
     private int personaBottom;
     private EditBox nameBox;
@@ -71,6 +76,7 @@ public final class CompanionEditScreen extends PanelScreen {
         this.campaign = mate != null ? mate.campaign() : "sandbox";
         this.chaos = mate != null ? mate.chaos() : 3;
         this.guests = mate == null || mate.guests();
+        this.brain = mate != null && !mate.brain().isEmpty() ? mate.brain() : "default";
     }
 
     private boolean hosted() {
@@ -79,13 +85,19 @@ public final class CompanionEditScreen extends PanelScreen {
 
     @Override
     protected int panelHeight() {
-        return 236;
+        return kind.equals("companion") ? 268 : 240;
+    }
+
+    @Override
+    protected int panelWidth() {
+        // Wide enough for the character chips in one row and a readable look field.
+        return 400;
     }
 
     @Override
     protected void build() {
         int x = left + PAD;
-        int w = PANEL_WIDTH - 2 * PAD;
+        int w = right - left - 2 * PAD;
         int y = top + PAD + 30;
 
         kindY = top + PAD + 11;
@@ -100,7 +112,7 @@ public final class CompanionEditScreen extends PanelScreen {
             addRenderableWidget(nameBox);
             setInitialFocus(nameBox);
         }
-        y += 32;
+        y += 36;
 
         lookY = y;
         if (kind.equals("companion")) {
@@ -112,7 +124,13 @@ public final class CompanionEditScreen extends PanelScreen {
             skinBox.setResponder(v -> account = v);
             addRenderableWidget(skinBox);
         }
-        y += 32;
+        y += 36;
+
+        brainY = -1;
+        if (kind.equals("companion")) {
+            brainY = y;
+            y += 33;
+        }
 
         characterY = y;
         chips.clear();
@@ -128,7 +146,8 @@ public final class CompanionEditScreen extends PanelScreen {
             cx += cw + 4;
         }
         int boxY = cy + 18;
-        int boxH = 42;
+        // The text box takes the room left above the buttons, so on a short screen it shrinks instead of covering them.
+        int boxH = Math.max(24, Math.min(60, bottom - PAD - 20 - 14 - boxY));
         if (hosted()) {
             // The character chips describe a player companion; a builder or god gets the space for its text.
             chips.clear();
@@ -197,6 +216,9 @@ public final class CompanionEditScreen extends PanelScreen {
             }
         }
         worldChips(g, xr - MODE_W, lookY);
+        if (brainY >= 0) brainRow(g, x, xr, brainY);
+        // The character box lies under the open list; hidden, it cannot catch the list's clicks.
+        if (personaBox != null) personaBox.visible = !brainOpen;
 
         Ui.section(g, font, tr("character"), x, characterY);
         Ui.textRight(g, font, Component.literal(persona.length() + "/" + MAX_PERSONA), xr, characterY, Ui.TEXT_MUTED);
@@ -215,6 +237,7 @@ public final class CompanionEditScreen extends PanelScreen {
         int half = (xr - x - 4) / 2;
         button(g, x, by, half, 20, tr("cancel"), Ui.ButtonStyle.NEUTRAL, this::onClose);
         button(g, x + half + 4, by, xr - x - half - 4, 20, tr(mate == null ? "create" : "save"), Ui.ButtonStyle.PRIMARY, this::save);
+        brainDropdown(g, x, xr);
     }
 
     /** Companion, builder or god in the subtitle row; the latter two only for the host or an operator, since they get console power. */
@@ -269,6 +292,72 @@ public final class CompanionEditScreen extends PanelScreen {
     }
 
     /** The builder's creature; a click shows the next one. */
+    private List<MenuState.BrainInfo> brains() {
+        MenuState.View view = MenuState.view();
+        return view != null ? view.brains() : List.of();
+    }
+
+    /** For the client smoke test: shows the open brain list. */
+    void openBrainList() {
+        brainOpen = true;
+    }
+
+    private MenuState.@Nullable BrainInfo brainInfo(String id) {
+        return brains().stream().filter(b -> b.id().equals(id)).findFirst().orElse(null);
+    }
+
+    /** Which brain the companion thinks with: a field that opens the list of brains, and what the chosen one is made for. */
+    private void brainRow(GuiGraphicsExtractor g, int x, int xr, int y) {
+        Ui.section(g, font, tr("brain"), x, y);
+        MenuState.BrainInfo current = brainInfo(brain);
+        int fy = y + 10;
+        int fw = xr - x;
+        boolean hover = !brainOpen && hovered(x, fy, fw, 18);
+        g.fill(x, fy, x + fw, fy + 18, brainOpen || hover ? Ui.CARD_BG_HOVER : Ui.CARD_BG);
+        Ui.border(g, x, fy, x + fw, fy + 18, brainOpen ? Ui.ACCENT_SOFT_EDGE : Ui.CARD_BORDER);
+        String name = current != null ? current.name() : brain;
+        Ui.text(g, font, Component.literal(Ui.fit(font, name, fw - 30)), x + 6, fy + 5, Ui.TEXT_PRIMARY);
+        Ui.textRight(g, font, Component.literal(brainOpen ? "▴" : "▾"), x + fw - 6, fy + 5, Ui.TEXT_ACCENT);
+        if (hover && current != null) {
+            List<Component> lines = new java.util.ArrayList<>();
+            if (!current.description().isEmpty()) lines.add(Component.literal(current.description()));
+            if (!current.models().isEmpty()) lines.add(tr("brain.models", current.models()));
+            lines.add(tr("brain.hint"));
+            g.setComponentTooltipForNextFrame(font, lines, x, fy + 30);
+        }
+        if (!brainOpen) clicks.add(x, fy, fw, 18, () -> brainOpen = true);
+    }
+
+    /** The open brain list, drawn over everything below the field; registered last, so it gets the clicks. */
+    private void brainDropdown(GuiGraphicsExtractor g, int x, int xr) {
+        if (!brainOpen || brainY < 0) return;
+        List<MenuState.BrainInfo> list = brains();
+        int fw = xr - x;
+        int ly = brainY + 10 + 19;
+        int rowH = 28;
+        int lh = Math.max(1, list.size()) * rowH + 4;
+        // A click anywhere else closes the list without passing through to what lies under it.
+        clicks.add(0, 0, width, height, () -> brainOpen = false);
+        g.fill(x - 1, ly - 1, x + fw + 1, ly + lh + 1, 0xFF000000);
+        g.fill(x, ly, x + fw, ly + lh, Ui.PANEL_BG);
+        Ui.border(g, x, ly, x + fw, ly + lh, Ui.ACCENT_SOFT_EDGE);
+        int ry = ly + 2;
+        for (MenuState.BrainInfo b : list) {
+            boolean selected = b.id().equals(brain);
+            boolean hover = hovered(x + 2, ry, fw - 4, rowH);
+            if (selected || hover) g.fill(x + 2, ry, x + fw - 2, ry + rowH, selected ? Ui.ACCENT_SOFT_BG : Ui.NEUTRAL_FILL_HOVER);
+            String title = b.name() + (b.version().isEmpty() ? "" : "  " + b.version()) + (b.builtin() ? "" : "  · " + tr("brain.own").getString());
+            Ui.text(g, font, Component.literal(Ui.fit(font, title, fw - 16)), x + 7, ry + 4, selected ? Ui.TEXT_ACCENT : Ui.TEXT_PRIMARY);
+            Ui.text(g, font, Component.literal(Ui.fit(font, b.description(), fw - 16)), x + 7, ry + 15, Ui.TEXT_MUTED);
+            String id = b.id();
+            clicks.add(x + 2, ry, fw - 4, rowH, () -> {
+                brain = id;
+                brainOpen = false;
+            });
+            ry += rowH;
+        }
+    }
+
     private void bodyCycle(GuiGraphicsExtractor g, int x, int y) {
         Ui.section(g, font, tr("body"), x, y);
         int cy = y + 10;
@@ -418,6 +507,7 @@ public final class CompanionEditScreen extends PanelScreen {
             if (!scope.equals(mate.scope())) command("vml worlds " + target + (scope.equals("global") ? " all" : " this"));
         }
         if (!skin.isEmpty() && (mate == null || !skin.equalsIgnoreCase(mate.skinSource()))) command("vml skin " + target + " " + skin);
+        if (kind.equals("companion") && !brain.equals(mate == null ? "default" : mate.brain())) command("vml brain " + target + " " + brain);
         onClose();
     }
 }

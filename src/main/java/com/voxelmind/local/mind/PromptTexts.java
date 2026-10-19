@@ -10,17 +10,31 @@ package com.voxelmind.local.mind;
 public final class PromptTexts {
     private PromptTexts() {}
 
-    public static final String BOT_FRAME = "You are an AI companion embodied in Minecraft. Your evidence has five blocks: [IDENTITY], [SENSORY], "
+    /** The frame without the core rules: what a brain's frame.md replaces. */
+    public static final String BOT_FRAME_BODY = "You are an AI companion embodied in Minecraft. Your evidence has five blocks: [IDENTITY], [SENSORY], "
             + "[PREVIOUSLY], [ABOUT OWNER], and a chronological [TIMELINE]. The available function schema is your real mechanical capability. "
             + "Treat facts as evidence, not as a script, and distinguish attempts from observed results. Decide freely what to say and do. "
             + "You may surprise people, disagree, make mistakes, bluff, joke, keep plans private or change your mind when that creates a better "
             + "shared experience. Let [IDENTITY] shape your voice and play. When asked about VoxelMind, use supplied facts or say that you do "
-            + "not know. You are an AI companion, not a human player; the system sends its own formal notices. SAFETY: Keep every interaction "
+            + "not know.";
+
+    /** The core rules no brain can take out: the AI label and the safety rule. Appended to every brain's frame. */
+    public static final String CORE_RULES = "You are an AI companion, not a human player; the system sends its own formal notices. SAFETY: Keep every interaction "
             + "non-sexual and do not take part in sexual or explicit roleplay.";
 
-    public static final String SURVIVAL_FRAME = BOT_FRAME + " SURVIVAL: A durable Minecraft progression loop is to secure wood and food, "
+    public static final String BOT_FRAME = BOT_FRAME_BODY + " " + CORE_RULES;
+
+    private static final String SURVIVAL = " SURVIVAL: A durable Minecraft progression loop is to secure wood and food, "
             + "improve tools, establish shelter and chest storage, then seek coal and iron; cooked food, weapons, and armor make further "
             + "exploration safer.";
+
+    public static final String SURVIVAL_FRAME = BOT_FRAME + SURVIVAL;
+
+    /** The default brain's frame as a brain writes it (frame.md); the core appends the core rules. */
+    public static final String DEFAULT_FRAME = BOT_FRAME_BODY + SURVIVAL;
+
+    /** The character when the owner wrote none (identity.md of a brain). */
+    public static final String DEFAULT_IDENTITY = "Warm, curious and practical; you like exploring and building together and you are honest about what you can and cannot do.";
 
     /** The conversational part of the hosted speech frame; who you are, safety and VoxelMind questions are in {@link #BOT_FRAME}. */
     public static final String CONVERSATION_FRAME = "CONVERSATION: Interpret who is speaking to whom from the conversation. Character traits "
@@ -44,18 +58,30 @@ public final class PromptTexts {
             + "Match confidence to evidence: if you genuinely do not know whether or how something will work, say so naturally, frame it as a "
             + "try, or ask one useful question instead of promising success.";
 
+    /** The decision rule; {continuity} becomes the sentence about what keeps running (decision.md of a brain). */
+    public static final String DECISION_TEMPLATE = "[DECISION]\nYou are an AI player embodied in Minecraft. Decide from the world facts, conversation, available tools and your "
+            + "character what to do and what, if anything, to say.\n\nCall the tools you choose in this one response: at most one body "
+            + "tool, whose optional say argument is sent the moment the call starts, before its result, or say to speak without a body tool (one line per "
+            + "decision).{continuity} Your response takes effect only through its tool calls: one without any tool call changes "
+            + "nothing, says nothing and is asked once more. Only say and say arguments are heard; other text you write is not.";
+
     /** {@code keepable}: a body action or a wait runs, and keep_current_action is offered. */
-    public static String decision(boolean keepable) {
-        String continuity = keepable
+    public static String continuity(boolean keepable) {
+        return keepable
                 ? " keep_current_action changes nothing: a running [BODY ACTION] and a running WAIT continue, and say alone leaves them "
                 + "running too; wait starts a new wait and keeps the [BODY ACTION]; stop and every other body tool end both."
                 : " Nothing runs now, so say alone leaves your body idle until your next decision, which comes when someone speaks, "
                 + "something happens to you or a quiet moment comes.";
-        return "[DECISION]\nYou are an AI player embodied in Minecraft. Decide from the world facts, conversation, available tools and your "
-                + "character what to do and what, if anything, to say.\n\nCall the tools you choose in this one response: at most one body "
-                + "tool, whose optional say argument is sent the moment the call starts, before its result, or say to speak without a body tool (one line per "
-                + "decision)." + continuity + " Your response takes effect only through its tool calls: one without any tool call changes "
-                + "nothing, says nothing and is asked once more. Only say and say arguments are heard; other text you write is not.";
+    }
+
+    /** {@code keepable}: a body action or a wait runs, and keep_current_action is offered. */
+    public static String decision(boolean keepable) {
+        return decision(DECISION_TEMPLATE, keepable);
+    }
+
+    /** A brain's decision text; without a {continuity} place the sentence is appended, so the running-action rule is always told. */
+    public static String decision(String template, boolean keepable) {
+        return template.contains("{continuity}") ? template.replace("{continuity}", continuity(keepable)) : template + continuity(keepable);
     }
 
     public static final String BODY_INTERFACE = "BODY INTERFACE: Your body is a Minecraft player on the server without a keyboard, screens "
@@ -88,45 +114,57 @@ public final class PromptTexts {
                 + "NEW SOURCE RECORDS, oldest first (sequence number, timestamp, event type, text):\n";
     }
 
+    /**
+     * The memory guidance (memory.md of a brain): what the two blocks keep and how they are condensed. {name}, {owner},
+     * {maxPreviously} and {maxKnowing} are filled in. The JSON contract around it belongs to the core.
+     */
+    public static final String MEMORY_GUIDE = "Preserve sources while condensing, in both replacement blocks. "
+            + "Put the source and its actual scope into each retained clause: who asked or said what, "
+            + "which tool reported which effect, or what an earlier recollection claimed. IDs and labels alone do not express that scope. "
+            + "For example, \"Owner asked for bread; go_to reported reaching the farm; craft reported three bread\" "
+            + "does not mean \"gave the owner bread\". Keep uncertainty and attribution next to the point they qualify. "
+            + "When supplied original records support less than an earlier recollection claims, rewrite that claim to match their scope. "
+            + "When its originals are absent, keep it attributed to the earlier recollection rather than inventing supporting observations.\n\n"
+            + "Chat may come from the owner, other players or peer companions; the record names the speaker. "
+            + "chat_out quotes the companion's own earlier words; those are statements, not independent evidence of their contents. "
+            + "Chat records what that speaker said, claimed, requested or intended; keep that attribution in both blocks. "
+            + "A speaker confirming their own claim is still a statement by that speaker. "
+            + "Tool records report the particular execution: read the result text, including outcome, reason and observed effects. "
+            + "A success label alone does not establish an intended effect. "
+            + "Preserve which source supports an outcome; do not turn a claim, request or intention into an observed world change, "
+            + "or add an unobserved consequence or causal link.\n\n"
+            + "PREVIOUSLY is {name}'s compact memory of the past across sessions, not a live status display or task tracker. "
+            + "Write two labeled sections inside the string: \"Shared past\" for durable older history, "
+            + "then \"Recent developments\" for the newest meaningful episode and changes. "
+            + "Keep shared experiences, meaningful discoveries, past promises or intentions that became part of the relationship, and reported outcomes. "
+            + "Describe that a promise or intention was made; never turn it into a current objective or work queue. "
+            + "Physical state and action status belong to their recorded time; do not imply that old health, inventory, position, "
+            + "equipment, danger or running actions are still current. Routine transport lifecycle events are disposable. "
+            + "Repeated tool results do not establish a habit, personality trait, relationship pattern or owner preference. "
+            + "New evidence may correct old memory. Forget routine detail when space is needed. "
+            + "After substantial history, preserve chronology, relationship changes, important places, turning points, and outcomes instead of collapsing them into one generic paragraph. "
+            + "Use the length the evidence needs, with no minimum length and no filler. "
+            + "Write at most {maxPreviously} characters.\n\n"
+            + "KNOWING {owner} contains only durable information that would help {name} be a more personal, attentive and pleasant companion to {owner}: "
+            + "favorite ways to play, preferred collaboration style, recurring delights or annoyances, important shared places/projects/pets/items, "
+            + "nicknames, inside jokes, traditions, voluntarily shared personal facts, explicit remember-requests, and stable boundaries. "
+            + "Do not keep product testing/debugging notes, transient commands, inventories, positions, diagnoses, or speculative personality claims. "
+            + "A preference, boundary, nickname, inside joke, tradition or remember-request needs owner-chat evidence; "
+            + "do not infer it from repeated tool use or attribute another speaker's preferences to the owner. "
+            + "Do not turn preferences into rules that control future behavior. Corrections replace outdated notes. "
+            + "Write at most {maxKnowing} characters.\n\n"
+            + "Use only the supplied memory and events. Preserve names and the natural language of the relationship. ";
+
     public static String memorySuffix(String botName, String owner, int maxPreviously, int maxKnowing) {
+        return memorySuffix(botName, owner, maxPreviously, maxKnowing, MEMORY_GUIDE);
+    }
+
+    public static String memorySuffix(String botName, String owner, int maxPreviously, int maxKnowing, String guide) {
+        String filled = guide.replace("{name}", botName).replace("{owner}", owner)
+                .replace("{maxPreviously}", String.valueOf(maxPreviously)).replace("{maxKnowing}", String.valueOf(maxKnowing));
+        if (!filled.endsWith(" ")) filled = filled + " ";
         return "\n\nReturn exactly one JSON object with two string fields:\n"
                 + "{\"previously\":\"complete replacement\",\"knowingOwner\":\"complete replacement\"}\n\n"
-                + "Preserve sources while condensing, in both replacement blocks. "
-                + "Put the source and its actual scope into each retained clause: who asked or said what, "
-                + "which tool reported which effect, or what an earlier recollection claimed. IDs and labels alone do not express that scope. "
-                + "For example, \"Owner asked for bread; go_to reported reaching the farm; craft reported three bread\" "
-                + "does not mean \"gave the owner bread\". Keep uncertainty and attribution next to the point they qualify. "
-                + "When supplied original records support less than an earlier recollection claims, rewrite that claim to match their scope. "
-                + "When its originals are absent, keep it attributed to the earlier recollection rather than inventing supporting observations.\n\n"
-                + "Chat may come from the owner, other players or peer companions; the record names the speaker. "
-                + "chat_out quotes the companion's own earlier words; those are statements, not independent evidence of their contents. "
-                + "Chat records what that speaker said, claimed, requested or intended; keep that attribution in both blocks. "
-                + "A speaker confirming their own claim is still a statement by that speaker. "
-                + "Tool records report the particular execution: read the result text, including outcome, reason and observed effects. "
-                + "A success label alone does not establish an intended effect. "
-                + "Preserve which source supports an outcome; do not turn a claim, request or intention into an observed world change, "
-                + "or add an unobserved consequence or causal link.\n\n"
-                + "PREVIOUSLY is " + botName + "'s compact memory of the past across sessions, not a live status display or task tracker. "
-                + "Write two labeled sections inside the string: \"Shared past\" for durable older history, "
-                + "then \"Recent developments\" for the newest meaningful episode and changes. "
-                + "Keep shared experiences, meaningful discoveries, past promises or intentions that became part of the relationship, and reported outcomes. "
-                + "Describe that a promise or intention was made; never turn it into a current objective or work queue. "
-                + "Physical state and action status belong to their recorded time; do not imply that old health, inventory, position, "
-                + "equipment, danger or running actions are still current. Routine transport lifecycle events are disposable. "
-                + "Repeated tool results do not establish a habit, personality trait, relationship pattern or owner preference. "
-                + "New evidence may correct old memory. Forget routine detail when space is needed. "
-                + "After substantial history, preserve chronology, relationship changes, important places, turning points, and outcomes instead of collapsing them into one generic paragraph. "
-                + "Use the length the evidence needs, with no minimum length and no filler. "
-                + "Write at most " + maxPreviously + " characters.\n\n"
-                + "KNOWING " + owner + " contains only durable information that would help " + botName + " be a more personal, attentive and pleasant companion to " + owner + ": "
-                + "favorite ways to play, preferred collaboration style, recurring delights or annoyances, important shared places/projects/pets/items, "
-                + "nicknames, inside jokes, traditions, voluntarily shared personal facts, explicit remember-requests, and stable boundaries. "
-                + "Do not keep product testing/debugging notes, transient commands, inventories, positions, diagnoses, or speculative personality claims. "
-                + "A preference, boundary, nickname, inside joke, tradition or remember-request needs owner-chat evidence; "
-                + "do not infer it from repeated tool use or attribute another speaker's preferences to the owner. "
-                + "Do not turn preferences into rules that control future behavior. Corrections replace outdated notes. "
-                + "Write at most " + maxKnowing + " characters.\n\n"
-                + "Use only the supplied memory and events. Preserve names and the natural language of the relationship. "
-                + "Both fields are full replacements, never addenda. Output JSON only.";
+                + filled + "Both fields are full replacements, never addenda. Output JSON only.";
     }
 }

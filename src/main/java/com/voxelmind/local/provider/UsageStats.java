@@ -72,6 +72,11 @@ public final class UsageStats {
         body.addProperty("provider", kind(config));
         body.addProperty("mod", version(VoxelMindLocal.MOD_ID));
         body.addProperty("mc", version("minecraft"));
+        body.addProperty("age", ageStep(config.installedDay, today));
+        post(body);
+    }
+
+    private static void post(JsonObject body) {
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(URL)).timeout(Duration.ofSeconds(10))
                     .header("Content-Type", "application/json")
@@ -80,6 +85,68 @@ public final class UsageStats {
         } catch (IllegalArgumentException e) {
             // A broken voxelmind.api property in a development run; a count is never worth an error.
         }
+    }
+
+    /** How long ago this installation started, in steps: "0" (today), "1-7", "8-30" or "31+" days. Only the step is sent. */
+    public static String ageStep(String installedDay, String today) {
+        try {
+            long days = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(installedDay), LocalDate.parse(today));
+            return days <= 0 ? "0" : days <= 7 ? "1-7" : days <= 30 ? "8-30" : "31+";
+        } catch (RuntimeException e) {
+            return "0";
+        }
+    }
+
+    /** Minutes of a day in steps: "1-15", "15-60" or "60+". Only the step is sent, never the exact time. */
+    public static String minuteStep(int minutes) {
+        return minutes < 15 ? "1-15" : minutes < 60 ? "15-60" : "60+";
+    }
+
+    /** The minute of the last decision counted per brain, so one minute counts once however many decisions it had. */
+    private static final java.util.Map<String, Long> COUNTED_MINUTE = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * After a companion's decision: the minute counts for its brain. When a new UTC day starts, the previous day's minutes per
+     * brain go out as steps (see {@link #minuteStep}), one count per installation and day; a day nobody played sends nothing.
+     */
+    public static void decided(com.voxelmind.local.mind.Brain brain) {
+        LocalConfig config = LocalConfig.get();
+        if (!config.usageStats || !config.usageStatsNoticed || FabricLoader.getInstance().isDevelopmentEnvironment()) return;
+        String today = LocalDate.now(ZoneOffset.UTC).toString();
+        long minute = System.currentTimeMillis() / 60_000;
+        String id = brain.statsId();
+        String sendDay = null;
+        java.util.Map<String, Integer> send = null;
+        boolean save = false;
+        synchronized (UsageStats.class) {
+            if (!today.equals(config.usageBrainDay)) {
+                if (config.usageBrainDay != null && !config.usageBrainDay.isBlank() && config.usageBrainMinutes != null && !config.usageBrainMinutes.isEmpty()) {
+                    sendDay = config.usageBrainDay;
+                    send = new java.util.TreeMap<>(config.usageBrainMinutes);
+                }
+                config.usageBrainDay = today;
+                config.usageBrainMinutes = new java.util.HashMap<>();
+                COUNTED_MINUTE.clear();
+                save = true;
+            }
+            Long last = COUNTED_MINUTE.put(id, minute);
+            if (last == null || last != minute) {
+                int total = config.usageBrainMinutes.merge(id, 1, Integer::sum);
+                // Written now and then, not every minute; the server stop writes the rest.
+                save |= total % 5 == 1;
+            }
+        }
+        if (save) LocalConfig.save();
+        if (send == null) return;
+        JsonObject body = new JsonObject();
+        body.addProperty("type", "brains");
+        body.addProperty("day", sendDay);
+        body.addProperty("mod", version(VoxelMindLocal.MOD_ID));
+        body.addProperty("mc", version("minecraft"));
+        JsonObject brains = new JsonObject();
+        for (var e : send.entrySet()) brains.addProperty(e.getKey(), minuteStep(e.getValue()));
+        body.add("brains", brains);
+        post(body);
     }
 
     /** "0.4.5" for the mod (without the "+26.2" build suffix), "1.21.11" for the game. */
