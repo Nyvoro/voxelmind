@@ -1,5 +1,13 @@
 # VoxelMind Local – Changelog
 
+## 0.4.6 (2026-10-19)
+
+**Works next to Carpet, and companions show the outer layer of their skin.**
+
+- **Carpet and other mods with fake players:** opening a world with Carpet installed crashed the game ("Mixin transformation of net.minecraft.server.players.PlayerList failed"), because both mods replaced the same step of a respawn. VoxelMind now wraps that step instead of replacing it, so both work together. Tested by starting servers with Carpet on 26.2 and 1.21.1.
+- **Skins with hat, jacket, sleeves and trouser legs:** a companion's body now shows every layer of its skin, like a player with all skin parts switched on. Before, only the base layer was drawn, so skins from NameMC looked bare.
+- **Long-term memory with LM Studio:** LM Studio refuses the JSON mode the memory rewrite asked for ("'response_format.type' must be 'json_schema'"), so "Who I have become", "Recent developments" and what a companion knows about you never changed there. When an endpoint refuses it, the mod now asks again without it (the prompt asks for JSON anyway) and remembers that for this model.
+
 ## 0.4.5 (2026-10-16)
 
 **Your own skins for companions, and an anonymous count of which AI service players use.**

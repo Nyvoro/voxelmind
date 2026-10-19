@@ -242,4 +242,49 @@ public class SettingsGameTests {
         helper.assertTrue(ModelCatalog.matches(flash, "deep flash") && !ModelCatalog.matches(flash, "haiku"), "search");
         helper.succeed();
     }
+
+    /**
+     * LM Studio refuses response_format json_object ("'response_format.type' must be 'json_schema'"); the memory rewrite
+     * used to fail on every try there. The request is repeated without it, and later ones leave it out at once.
+     */
+    @GameTest
+    public void anEndpointThatRefusesResponseFormatIsAskedWithoutIt(GameTestHelper helper) throws java.io.IOException {
+        List<String> bodies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        com.sun.net.httpserver.HttpServer stub = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        stub.createContext("/v1/chat/completions", ex -> {
+            String body = new String(ex.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            bodies.add(body);
+            boolean withFormat = body.contains("\"response_format\"");
+            String reply = withFormat ? "{\"error\":\"'response_format.type' must be 'json_schema'\"}"
+                    : "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"previously\\\":\\\"we built a hut\\\"}\"}}]}";
+            byte[] bytes = reply.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(withFormat ? 400 : 200, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        stub.start();
+        try {
+            var endpoint = new LlmClient.Endpoint("http://127.0.0.1:" + stub.getAddress().getPort() + "/v1", "", 20);
+            com.google.gson.JsonObject format = new com.google.gson.JsonObject();
+            format.addProperty("type", "json_object");
+            com.google.gson.JsonArray messages = new com.google.gson.JsonArray();
+            com.google.gson.JsonObject user = new com.google.gson.JsonObject();
+            user.addProperty("role", "user");
+            user.addProperty("content", "Answer with JSON.");
+            messages.add(user);
+            LlmClient.Response first = LlmClient.chatAt(endpoint, "openai/gpt-oss-20b", messages, format).get(20, java.util.concurrent.TimeUnit.SECONDS);
+            helper.assertTrue(first.content().contains("we built a hut"), "the answer arrives: " + first.content());
+            helper.assertTrue(bodies.size() == 2 && !bodies.get(1).contains("response_format"), "asked again without response_format, requests " + bodies.size());
+            LlmClient.chatAt(endpoint, "openai/gpt-oss-20b", messages, format).get(20, java.util.concurrent.TimeUnit.SECONDS);
+            helper.assertTrue(bodies.size() == 3 && !bodies.get(2).contains("response_format"), "the next request leaves it out at once, requests " + bodies.size());
+            helper.assertFalse(LlmClient.refusesResponseFormat(new LlmClient.LlmException(400, "HTTP 400: tool_choice is not supported")),
+                    "another 400 is not about response_format");
+            helper.succeed();
+        } catch (Exception e) {
+            helper.fail("response_format fallback: " + e);
+        } finally {
+            stub.stop(0);
+        }
+    }
 }

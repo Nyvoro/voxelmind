@@ -108,6 +108,21 @@ public final class Compat {
     }
 
     /** A game profile carrying a signed {@code textures} property: the skin a companion borrows from an account. */
+    /**
+     * Client settings for a companion body: the defaults, but with every skin layer shown (hat, jacket, sleeves,
+     * trouser legs, cape). A player's game sends its own setting; a body has none, and the default shows none.
+     */
+    public static net.minecraft.server.level.ClientInformation companionClientInformation() {
+        net.minecraft.server.level.ClientInformation d = net.minecraft.server.level.ClientInformation.createDefault();
+        //? if >=1.21.2 {
+        return new net.minecraft.server.level.ClientInformation(d.language(), d.viewDistance(), d.chatVisibility(), d.chatColors(),
+                0x7F, d.mainHand(), d.textFilteringEnabled(), d.allowsListing(), d.particleStatus());
+        //?} else {
+        /*return new net.minecraft.server.level.ClientInformation(d.language(), d.viewDistance(), d.chatVisibility(), d.chatColors(),
+                0x7F, d.mainHand(), d.textFilteringEnabled(), d.allowsListing());
+        *///?}
+    }
+
     public static GameProfile texturedProfile(UUID id, String name, String value, @Nullable String signature) {
         //? if >=1.21.9 {
         com.google.common.collect.Multimap<String, com.mojang.authlib.properties.Property> map =

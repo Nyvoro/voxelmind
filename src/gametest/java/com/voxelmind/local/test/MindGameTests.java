@@ -742,6 +742,9 @@ public class MindGameTests {
             long rows = c.state.timeline.last(Timeline.KEEP).stream().filter(e -> e.kind.equals("result") && e.text.startsWith("deadly()")).count();
             helper.assertTrue(rows == 1, "its result was recorded once, got " + rows);
             helper.assertTrue(sent(c, "Back again.") != null, "the companion decided again after respawning");
+            helper.assertTrue(c.body() instanceof com.voxelmind.local.body.CompanionPlayer, "the respawn made a companion body again");
+            helper.assertTrue(c.body().clientInformation().modelCustomisation() == 0x7F,
+                    "the body shows every skin layer (hat, jacket, sleeves, trousers), got " + c.body().clientInformation().modelCustomisation());
         });
     }
 

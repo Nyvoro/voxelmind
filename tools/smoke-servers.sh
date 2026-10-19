@@ -83,6 +83,11 @@ for v in "${VERSIONS[@]}"; do
     cp "$CACHE/launch-$v-$loader.jar" "$DIR/fabric-server-launch.jar"
     cp "$CACHE/fabric-api-$fabric_api.jar" "$DIR/mods/"
     cp "$MOD_JAR" "$DIR/mods/"
+    # Other mods to boot alongside, e.g. SMOKE_EXTRA_MODS="build/carpet/carpet-{mc}.jar" ({mc} = target); missing ones are skipped.
+    for extra in ${SMOKE_EXTRA_MODS:-}; do
+      extra_jar="${extra//\{mc\}/$v}"
+      [ -f "$extra_jar" ] && cp "$extra_jar" "$DIR/mods/"
+    done
     # Reuse the vanilla server jar and libraries the Fabric launcher fetched for this version earlier.
     [ -d "$CACHE/dotfabric-$v" ] && cp -r "$CACHE/dotfabric-$v" "$DIR/.fabric"
     echo "eula=true" > "$DIR/eula.txt"

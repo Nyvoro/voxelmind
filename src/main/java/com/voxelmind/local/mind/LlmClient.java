@@ -28,6 +28,11 @@ public final class LlmClient {
     private static final java.util.Set<String> REASONING_REQUIRED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     /** Models whose endpoint refused tool_choice "required" (e.g. Anthropic with reasoning); they get "auto". */
     private static final java.util.Set<String> TOOL_CHOICE_AUTO = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /**
+     * Endpoint and model pairs that refused a response_format (LM Studio only takes json_schema, not json_object);
+     * they are asked without one, and the prompt's own request for JSON does the job.
+     */
+    private static final java.util.Set<String> NO_RESPONSE_FORMAT = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     /** Where a request goes: base URL and the key for it. */
     public record Endpoint(String baseUrl, String key, int timeoutSeconds) {
@@ -155,10 +160,16 @@ public final class LlmClient {
                                                        boolean toolRequired, double temperature, int maxTokens,
                                                        @Nullable JsonObject responseFormat, @Nullable String reasoning, List<String> providers, int index) {
         String provider = index < providers.size() ? providers.get(index) : null;
-        return send(endpoint, model, messages, tools, toolRequired, temperature, maxTokens, responseFormat, reasoning, provider)
+        String formatKey = endpoint.baseUrl() + "|" + model;
+        JsonObject format = responseFormat != null && NO_RESPONSE_FORMAT.contains(formatKey) ? null : responseFormat;
+        return send(endpoint, model, messages, tools, toolRequired, temperature, maxTokens, format, reasoning, provider)
                 .handle((response, error) -> {
                     if (error == null) return CompletableFuture.completedFuture(response);
                     Throwable cause = error.getCause() != null ? error.getCause() : error;
+                    if (format != null && refusesResponseFormat(cause)) {
+                        NO_RESPONSE_FORMAT.add(formatKey);
+                        return attempt(endpoint, model, messages, tools, toolRequired, temperature, maxTokens, null, reasoning, providers, index);
+                    }
                     if (endpoint.openRouter() && !REASONING_REQUIRED.contains(model) && refusesReasoningOff(cause)) {
                         REASONING_REQUIRED.add(model);
                         return attempt(endpoint, model, messages, tools, toolRequired, temperature, maxTokens, responseFormat, reasoning, providers, index);
@@ -173,6 +184,17 @@ public final class LlmClient {
                     return CompletableFuture.<Response>failedFuture(error);
                 })
                 .thenCompose(f -> f);
+    }
+
+    /** One request without tools to an explicit endpoint instead of the configured one (checks and tests). */
+    public static CompletableFuture<Response> chatAt(Endpoint endpoint, String model, JsonArray messages, @Nullable JsonObject responseFormat) {
+        return attempt(endpoint, model, messages, null, false, 0.2, 512, responseFormat, null, List.of(), 0);
+    }
+
+    /** "'response_format.type' must be 'json_schema'" from LM Studio, or another endpoint's 400 about response_format. */
+    public static boolean refusesResponseFormat(Throwable error) {
+        if (!(error instanceof LlmException e) || e.status != 400 || e.getMessage() == null) return false;
+        return e.getMessage().toLowerCase(java.util.Locale.ROOT).contains("response_format");
     }
 
     private static boolean refusesRequiredToolChoice(Throwable error) {

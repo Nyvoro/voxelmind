@@ -6,7 +6,6 @@ import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.OutgoingChatMessage;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
@@ -28,7 +27,7 @@ public class CompanionPlayer extends ServerPlayer {
     private @Nullable Vec3 receivedMotion;
 
     public CompanionPlayer(MinecraftServer server, ServerLevel level, GameProfile profile) {
-        super(server, level, profile, ClientInformation.createDefault());
+        super(server, level, profile, com.voxelmind.local.compat.Compat.companionClientInformation());
     }
 
     public void setListener(@Nullable BodyListener listener) {
