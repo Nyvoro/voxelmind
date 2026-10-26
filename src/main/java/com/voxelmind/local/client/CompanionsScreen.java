@@ -87,7 +87,6 @@ public final class CompanionsScreen extends PanelScreen {
         boolean problem = !view.aiProblem().isEmpty();
         Component label = !view.connected() ? tr("ai.none")
                 : view.aiOutOfJoules() ? tr("ai.joules_empty")
-                : view.aiOutOfSparks() ? tr("ai.sparks_empty")
                 : problem ? tr("ai.problem", model(view.model()))
                 : Component.literal(model(view.model()));
         boolean ok = view.connected() && !problem;
@@ -200,10 +199,16 @@ public final class CompanionsScreen extends PanelScreen {
         links(g, ly + 14 + 5);
     }
 
-    /** Text links under the buttons, as in the original mod: feature requests on Discord, donations on Ko-fi. */
+    /**
+     * Text links under the buttons, as in the original mod: feature requests on Discord, donations on Ko-fi, and the game
+     * VoxelMind is becoming (its hover says so in one sentence).
+     */
     private void links(GuiGraphicsExtractor g, int y) {
-        Component[] labels = {tr("feature_request"), Component.empty().append(Component.literal("♥ ").withStyle(ChatFormatting.RED)).append(tr("support"))};
-        String[] urls = {VoxelMindLocal.FEATURE_REQUEST_URL, VoxelMindLocal.SUPPORT_URL};
+        Component[] labels = {tr("feature_request"), Component.empty().append(Component.literal("♥ ").withStyle(ChatFormatting.RED)).append(tr("support")),
+                tr("game")};
+        String[] urls = {VoxelMindLocal.FEATURE_REQUEST_URL, VoxelMindLocal.SUPPORT_URL, VoxelMindLocal.GAME_URL};
+        Component[] hovers = {Component.literal(urls[0]), Component.literal(urls[1]),
+                Component.translatable("voxelmind_local.game").append(" voxel-mind.com")};
         int sep = 14;
         int total = sep * (labels.length - 1);
         for (Component l : labels) total += font.width(l);
@@ -213,7 +218,7 @@ public final class CompanionsScreen extends PanelScreen {
             boolean hover = hovered(x - 2, y - 2, w + 4, 12);
             Ui.text(g, font, labels[i], x, y, hover ? Ui.TEXT_PRIMARY : Ui.TEXT_SECONDARY);
             String url = urls[i];
-            if (hover) g.setComponentTooltipForNextFrame(font, List.of(Component.literal(url)), x, y + 14);
+            if (hover) g.setTooltipForNextFrame(font, font.split(hovers[i], 240), x, y + 14);
             clicks.add(x - 2, y - 2, w + 4, 12, () -> Util.getPlatform().openUri(url));
             x += w + sep;
         }

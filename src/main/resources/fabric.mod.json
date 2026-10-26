@@ -3,7 +3,7 @@
   "id": "voxelmind_local",
   "version": "${version}",
   "name": "VoxelMind",
-  "description": "AI beings that live in your world: a companion with a real player body, a Builder fairy and a God game master. They think with the AI you choose: VoxelMind Sparks, Player2, your own OpenRouter account or a local model.",
+  "description": "AI beings that live in your world: a companion with a real player body, a Builder fairy and a God game master. They think with the AI you choose: Player2, your own key (e.g. OpenRouter) or a local model.",
   "icon": "assets/voxelmind_local/icon.png",
   "authors": [
     "Nyvoro UG"

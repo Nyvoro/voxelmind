@@ -24,6 +24,8 @@ public final class VoxelMindLocal implements ModInitializer {
     public static final String SUPPORT_URL = "https://ko-fi.com/voxelmind";
     /** Discord invite into #voxelmind-feature-request; there is no feedback database any more. */
     public static final String FEATURE_REQUEST_URL = "https://discord.gg/jRthVZV2uk";
+    /** The game VoxelMind is becoming (waiting list); one line in the menu and in the notice that Sparks ended. */
+    public static final String GAME_URL = "https://voxel-mind.com/?utm_source=mod&utm_medium=ingame&utm_campaign=sparks_end#waitlist";
 
     @Override
     public void onInitialize() {

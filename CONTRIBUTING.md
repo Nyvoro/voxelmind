@@ -26,4 +26,4 @@ See `README.md` and `docs/VERSIONS.md`. You need JDK 21 (for 1.21.x) and JDK 25 
 
 ## Security
 
-Please do not open public issues for security problems (for example a way to leak API keys or Sparks tokens). Write to info@voxel-mind.com instead.
+Please do not open public issues for security problems (for example a way to leak API keys or sign-in tokens). Write to info@voxel-mind.com instead.

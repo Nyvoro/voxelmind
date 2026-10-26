@@ -30,7 +30,6 @@ public final class Snapshots {
         if (failure != null && System.currentTimeMillis() - failure.at() < 15 * 60_000) {
             root.addProperty("aiProblem", failure.explained());
             root.addProperty("aiOutOfJoules", failure.player2() && failure.status() == 402);
-            root.addProperty("aiOutOfSparks", config.isVoxelMind() && failure.status() == 402);
         }
         root.addProperty("owner", viewer.getGameProfile().name());
         root.addProperty("worldHardcore", viewer.level().getServer().isHardcore());

@@ -257,10 +257,10 @@ public abstract class HostedMind {
             long backoff = Math.min(30_000, 1000L << failures);
             retryAt = now + backoff;
             VoxelMindLocal.LOG.warn("[{}] hosted turn failed: {}", c.name(), cause.toString());
-            if (LlmClient.outOfPrepaid(cause)) {
+            if (LlmClient.outOfJoules(cause)) {
                 if (now - lastNoticeAt > 600_000) {
                     lastNoticeAt = now;
-                    c.notifyOwner(com.voxelmind.local.command.VmlCommand.emptyNotice(c.name(), c.state.ownerName));
+                    c.notifyOwner(com.voxelmind.local.command.VmlCommand.joulesNotice(c.name()));
                 }
             } else if (now - lastNoticeAt > 120_000) {
                 lastNoticeAt = now;

@@ -315,11 +315,11 @@ public final class Mind {
         Throwable cause = error.getCause() != null ? error.getCause() : error;
         VoxelMindLocal.LOG.warn("[{}] LLM request failed: {}", c.name(), cause.toString());
         long now = System.currentTimeMillis();
-        if (LlmClient.outOfPrepaid(cause)) {
+        if (LlmClient.outOfJoules(cause)) {
             // Joules recharge over hours; one notice every 10 minutes is enough.
             if (now - lastNoticeAt > 600_000) {
                 lastNoticeAt = now;
-                c.notifyOwner(com.voxelmind.local.command.VmlCommand.emptyNotice(c.name(), c.state.ownerName));
+                c.notifyOwner(com.voxelmind.local.command.VmlCommand.joulesNotice(c.name()));
             }
             return;
         }

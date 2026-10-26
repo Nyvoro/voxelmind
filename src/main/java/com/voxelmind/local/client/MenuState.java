@@ -49,8 +49,7 @@ public final class MenuState {
     public record BrainInfo(String id, String name, String version, String author, String description, String models, boolean builtin) {}
 
     public record View(boolean host, String model, String endpoint, boolean connected, String owner, boolean worldHardcore,
-                       String aiProblem, boolean aiOutOfJoules, List<Mate> mates, long receivedAt, boolean mayHost, boolean aiOutOfSparks,
-                       List<BrainInfo> brains) {
+                       String aiProblem, boolean aiOutOfJoules, List<Mate> mates, long receivedAt, boolean mayHost, List<BrainInfo> brains) {
         public @Nullable Mate find(UUID id) {
             for (Mate m : mates) if (m.id().equals(id)) return m;
             return null;
@@ -103,7 +102,7 @@ public final class MenuState {
             for (JsonElement e : root.getAsJsonArray("companions")) mates.add(mate(e.getAsJsonObject()));
             view = new View(bool(root, "host"), str(root, "model"), str(root, "endpoint"), bool(root, "connected"),
                     str(root, "owner"), bool(root, "worldHardcore"), str(root, "aiProblem"), bool(root, "aiOutOfJoules"),
-                    List.copyOf(mates), System.currentTimeMillis(), bool(root, "mayHost"), bool(root, "aiOutOfSparks"), brains(root));
+                    List.copyOf(mates), System.currentTimeMillis(), bool(root, "mayHost"), brains(root));
         } catch (Exception e) {
             VoxelMindLocal.LOG.warn("Could not read the companion snapshot", e);
         }

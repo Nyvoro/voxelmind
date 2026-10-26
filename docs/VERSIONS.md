@@ -62,7 +62,7 @@ export GRADLE_USER_HOME=V:/Android/Gradle
 bash tools/build-all.sh                      # or: bash tools/build-all.sh 1.21.1 26.2
 
 # 26.2 tests (26.2 is the default active project)
-./gradlew :26.2:runGameTest                  # 132 server game tests
+./gradlew :26.2:runGameTest                  # 141 server game tests
 ./gradlew :26.2:runClientGameTest            # the long client test with screenshots
 ./gradlew :26.2:runServer                    # dev server in voxelmind-local/run (port 25599, owner-bot scenarios)
 ./gradlew :26.2:build                        # jar + game tests
@@ -117,7 +117,7 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
 | `client/ModelPickerScreen.java` | row rendering/click handling: `renderContent` + `MouseButtonEvent` from 1.21.9; before, `render(index, top, left, ...)`, rows drawn at the row origin and a 250 ms double-click timer instead of the `doubleClick` flag |
 | `client/PanelScreen.java` | `mouseClicked(MouseButtonEvent, boolean)` from 1.21.9, `mouseClicked(x, y, button)` before |
 | `client/ui/Ui.java` | `wordWrap`: `textWithWordWrap` (26.1+) vs a shadowed line loop (the old `drawWordWrap` draws without shadow) |
-| `client/VoxelMindSignIn.java`, `client/VoxelMindLocalClient.java` and the many plain renames | session service (`mc.services()` from 1.21.9), key mapping category (a `Category` object from 1.21.9, a string before), `Screens.getWidgets/getButtons`, `sendSystemMessage` |
+| `client/VoxelMindLocalClient.java` and the many plain renames | session service (`mc.services()` from 1.21.9), key mapping category (a `Category` object from 1.21.9, a string before), `Screens.getWidgets/getButtons`, `sendSystemMessage` |
 | `src/main/resources/fabric.mod.json`, `build.gradle` | `depends.minecraft` = exact target version, Java and loader minimum per target, Loom plugin id (`fabric-loom` for 1.21.x with Mojang mappings and a `jspecify` compile-only dependency, `net.fabricmc.fabric-loom` for the unobfuscated 26.x) |
 | `versions/<mc>/gradle.properties` | `minecraft_version`, `fabric_version`, `loader_version`, `java_version` |
 | `src/main/resources/voxelmind_local.mixins.json`, `mixin/*.java` | no per-version code: the five mixins (`PlayerList.respawn` as a MixinExtras `@WrapOperation` so it chains with Carpet's redirect of the same call, `SleepStatus.update`, `BlockItem.place` with MixinExtras `@ModifyExpressionValue`/`@Share`, `ServerPlayerGameMode.useItemOn` for right-click conversions, `PistonBaseBlock.moveBlocks`) apply unchanged on all 16 targets; Loom remaps the annotation strings for 1.21.x, and the production server boot (`tools/smoke-servers.sh`) proves the remapped targets; `SMOKE_EXTRA_MODS="build/carpet/carpet-{mc}.jar"` boots them next to other mods |
@@ -131,14 +131,15 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
   `Done (`, runs `vml list` and `stop`, and fails on mixin / class loading / mod loading errors or a missing
   "VoxelMind Local loaded". Because it runs the **remapped** jar it proves the intermediary remapping (mixin targets
   and all) of the 1.21.x targets, which a Gradle dev run cannot.
-- **`tools/smoke-client.sh`** (code in `src/clientSmoke`, a dev-only mod that is never packaged): a real client joins a flat
+- **`tools/smoke-client.sh`** (code in `src/clientSmoke`, a dev-only mod that is never packaged): a real client starts from a
+  0.5.0 config on VoxelMind Sparks (checks that it moved to Player2), joins a flat
   singleplayer world (dev run), summons a companion with `/vml summon`, opens every screen (companions, edit x2,
-  settings, model picker, monitor, memories, pause menu with the VoxelMind button), then runs the body without any language
+  the Sparks-ended notice, settings, model picker, monitor, memories, pause menu with the VoxelMind button), then runs the body without any language
   model: walk, craft planks/sticks/table/pickaxe, a failing craft, smelt, collect, mine, place, chest, dig, survey, drop.
   The `VML-SMOKE body ...` lines are written to `build/client-smoke/<mc>/smoke-lines.txt`; apart from coordinates they are
   identical on all 16 versions. A render error would crash the client and fail the run. With `SMOKE_SHOTS=1` it also photographs
   each screen for visual comparison against 26.2.
-- **26.2 game tests**: `runGameTest` (132 server tests: body, tools, settings, hosted minds incl. command no-ops and geometry rejections, one mind against a stub endpoint, doors, placed blocks, building among trees, surfacing, knockback, melee, threat events) and `runClientGameTest`
+- **26.2 game tests**: `runGameTest` (141 server tests: body, tools, settings incl. the Sparks migration, brains, hosted minds incl. command no-ops and geometry rejections, one mind against a stub endpoint, doors, placed blocks, building among trees, surfacing, knockback, melee, threat events) and `runClientGameTest`
   (one long client test with screenshots) - must stay green; they also run for 1.21.11 and 26.1 / 26.1.1 / 26.1.2
   (server tests). Older targets differ in `GameTestHelper` (Component messages instead of Strings from 1.21.11) and, below
   1.21.5, in how tests are registered; the client smoke covers the same body actions there.
@@ -171,5 +172,5 @@ To see all errors of a target: `./gradlew "Set active project to X"` then `./gra
 
 ```bash
 cd voxelmind-werkstatt/ops
-node curseforge-release.mjs --surface local --version 0.4.1 --changelog ../../voxelmind-local/CHANGELOG.md --dry-run   # beta is the default of this surface until 08.11.
+node curseforge-release.mjs --surface local --version <version> --changelog <file with that version's CHANGELOG section> --dry-run   # then without --dry-run
 ```

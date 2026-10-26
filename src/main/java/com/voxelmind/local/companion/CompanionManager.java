@@ -510,7 +510,7 @@ public final class CompanionManager {
             if (!com.voxelmind.local.config.LocalConfig.get().hasCredentials()) {
                 if (server.isSingleplayerOwner(new NameAndId(player.getUUID(), player.getGameProfile().name()))) {
                     message.append(" ").append(Component.translatableWithFallback("voxelmind_local.notice.join.no_ai",
-                                    "First choose how they think: VoxelMind Sparks (sign in with your Minecraft account, welcome Sparks included), Player2, your OpenRouter account or a local model:")
+                                    "First choose how they think: Player2 (free), your own key (e.g. OpenRouter) or a local model:")
                                     .withStyle(ChatFormatting.GOLD))
                             .append(" ").append(com.voxelmind.local.command.VmlCommand.settingsLink());
                 } else {
@@ -519,6 +519,11 @@ public final class CompanionManager {
                 }
             }
             player.sendSystemMessage(message);
+        }
+        // A config that still thought with VoxelMind Sparks: whoever may change the AI hears once that it ended (on a client the
+        // title screen usually said it already).
+        if (mayConfigure(player) && com.voxelmind.local.config.LocalConfig.takeSparksEndedNotice()) {
+            player.sendSystemMessage(com.voxelmind.local.command.VmlCommand.sparksEndedNotice());
         }
         com.voxelmind.local.provider.UsageStats.noticeOnce(player, mayConfigure(player));
         for (GodMind god : gods()) if (god.sees(player)) god.worldEvent(player.getGameProfile().name() + " joined the world", true);

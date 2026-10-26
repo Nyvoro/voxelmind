@@ -1,5 +1,14 @@
 # VoxelMind Local – Changelog
 
+## 0.5.1 (2026-10-26)
+
+**VoxelMind Sparks has ended. The mod stays free: your companions think with Player2, your own key or a local model.**
+
+- **Sparks is gone from the mod.** VoxelMind Sparks, our prepaid AI service, has ended: buying Sparks stopped on 26 October 2026, and the free daily Sparks end on 8 November 2026. Its choice under "AI from", the Minecraft sign-in, `/vml sparks`, `/vml sparks redeem` and `/vml endpoint voxelmind` are removed. Older versions of the mod stop thinking with Sparks on 8 November.
+- **If your companions thought with Sparks:** the first start of 0.5.1 says once that Sparks has ended and takes you to the AI settings (on a dedicated server, the first operator who joins reads it in chat). Choose Player2 (free), your own key (for example OpenRouter) or a local model (Ollama, LM Studio). Companions, their memories and all your other settings stay as they were; only the AI source changes, and the old Sparks sign-in is deleted from the config.
+- **New installations start on Player2** (free, one sign-in).
+- **What comes next:** we're building VoxelMind into its own game where AI villagers live on their own. One link to voxel-mind.com sits under the companion menu ("Our game").
+
 ## 0.5.0 (2026-10-19)
 
 **Brains: choose how a companion thinks, or build your own, with your AI agent if you like.**

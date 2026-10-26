@@ -43,22 +43,20 @@ public class SettingsGameTests {
     }
 
     @GameTest
-    public void newConfigStartsOnSparksAndKeysOnlyReachTheirHosts(GameTestHelper helper) {
+    public void newConfigStartsOnPlayer2AndKeysOnlyReachTheirHosts(GameTestHelper helper) {
         LocalConfig config = new LocalConfig();
-        helper.assertTrue(config.isVoxelMind() && !config.hasCredentials(), "a new config starts on VoxelMind Sparks and waits for the sign-in");
+        helper.assertTrue(config.isPlayer2() && !config.hasCredentials() && !config.sparksEndedNotice, "a new config starts on Player2 and waits for the sign-in");
         config.selectEndpoint(LocalConfig.OPENROUTER_URL);
         config.setKey("sk-or-v1-secret");
         config.selectEndpoint("https://openrouter.ai.example.net/api/v1");
         helper.assertFalse(config.isOpenRouter(), "a lookalike host is not OpenRouter");
         helper.assertTrue(config.effectiveApiKey().isEmpty(), "the OpenRouter key never goes to a lookalike host");
-        config.selectEndpoint("https://api.voxel-mind.com.example.net/v1");
-        helper.assertFalse(config.isVoxelMind(), "a lookalike host is not the VoxelMind API");
         config.selectEndpoint("https://api.player2.game.example.net/v1");
         helper.assertFalse(config.isPlayer2(), "a lookalike host is not Player2");
         helper.assertTrue(LocalConfig.isHost("https://OpenRouter.ai/api/v1", "openrouter.ai"), "hosts compare without case");
         helper.assertFalse(LocalConfig.isHost("http://openrouter.ai/api/v1", "openrouter.ai"), "only https gets a stored key");
         helper.assertTrue(LocalConfig.DEFAULT_PROVIDER_ORDER.equals(java.util.List.of("Relace", "Sail Research", "Together")),
-                "the default model is routed to the zero-data-retention providers the VoxelMind API uses");
+                "the default model is routed to the measured zero-data-retention providers");
         helper.succeed();
     }
 
@@ -138,46 +136,38 @@ public class SettingsGameTests {
         });
     }
 
+    /**
+     * A 0.5.0 config that thought with VoxelMind Sparks: after the update it starts on Player2 with a one-time notice, keeps
+     * every other setting and key, and the old Sparks sign-in leaves the file. The Sparks API cannot be chosen again.
+     */
     @GameTest
-    public void voxelmindKeepsItsOwnTokenAndModel(GameTestHelper helper) {
-        LocalConfig config = new LocalConfig();
-        config.selectEndpoint(LocalConfig.OPENROUTER_URL);
-        config.setKey("sk-or-v1-openrouter");
-        config.selectEndpoint(com.voxelmind.local.provider.VoxelMindApi.BASE);
-        helper.assertTrue(config.isVoxelMind() && !config.isOpenRouter() && !config.isPlayer2(), "VoxelMind endpoint");
-        helper.assertFalse(config.hasCredentials(), "VoxelMind needs a sign-in");
-        helper.assertTrue(config.effectiveApiKey().isEmpty(), "the OpenRouter key never goes to the VoxelMind API");
-        config.setKey("vm_token");
-        helper.assertTrue(config.voxelmindKey.equals("vm_token") && config.apiKey.equals("sk-or-v1-openrouter"), "keys stay apart");
-        helper.assertTrue(config.hasCredentials() && config.modelLabel().equals("VoxelMind Sparks"), "signed in, our model");
-        helper.assertTrue(config.providerOrder.isEmpty(), "routing happens in the API");
-        helper.assertTrue(com.voxelmind.local.provider.VoxelMindApi.buyUrl("Steve_1").equals("https://voxel-mind.com/sparks?name=Steve_1"), "shop link");
-        var notice = com.voxelmind.local.command.VmlCommand.sparksNotice("Lysa", "Steve");
-        boolean linksToShop = notice.toFlatList().stream().anyMatch(part ->
+    public void sparksConfigMovesToPlayer2AndKeepsTheRest(GameTestHelper helper) {
+        LocalConfig config = LocalConfig.fromJson("""
+                {"apiKey": "sk-or-v1-kept", "player2Key": "", "baseUrl": "https://api.voxel-mind.com/v1",
+                 "voxelmindKey": "vm_secret_token", "voxelmindName": "Steve", "model": "acme/kept-model",
+                 "language": "de", "maxRequestsPerMinute": 7, "usageStats": false, "installedDay": "2026-10-01"}""");
+        helper.assertTrue(config != null && config.isPlayer2() && config.baseUrl.equals(Player2.WEB), "Sparks became Player2: " + (config == null ? null : config.baseUrl));
+        helper.assertTrue(config.sparksEndedNotice, "the host is told once");
+        helper.assertFalse(config.hasCredentials(), "Player2 still needs its sign-in; companions say so instead of doing nothing");
+        helper.assertTrue(config.apiKey.equals("sk-or-v1-kept") && config.model.equals("acme/kept-model") && config.language.equals("de")
+                && config.maxRequestsPerMinute == 7 && !config.usageStats && config.installedDay.equals("2026-10-01"), "every other setting stays");
+        String written = config.toJson();
+        helper.assertFalse(written.contains("vm_secret_token") || written.contains("voxelmind"), "the Sparks sign-in leaves the file: " + written);
+        LocalConfig other = LocalConfig.fromJson("{\"baseUrl\": \"http://localhost:11434/v1\", \"model\": \"qwen3:8b\"}");
+        helper.assertTrue(other != null && other.baseUrl.equals("http://localhost:11434/v1") && !other.sparksEndedNotice, "other endpoints are left alone");
+        helper.assertTrue(LocalConfig.isSparks("https://api.voxel-mind.com/v1") && LocalConfig.isSparks("http://API.voxel-mind.com/v1/"),
+                "the Sparks API in any spelling");
+        helper.assertFalse(LocalConfig.isSparks("https://api.voxel-mind.com.example.net/v1") || LocalConfig.isSparks(Player2.WEB)
+                || LocalConfig.isSparks("not a url"), "only the Sparks API itself");
+        var notice = com.voxelmind.local.command.VmlCommand.sparksEndedNotice();
+        String text = notice.getString();
+        helper.assertTrue(text.contains("VoxelMind Sparks has ended") && text.contains("local model") && text.contains("voxel-mind.com"), "notice: " + text);
+        boolean linksToSettings = notice.toFlatList().stream().anyMatch(part ->
+                part.getStyle().getClickEvent() instanceof net.minecraft.network.chat.ClickEvent.RunCommand run && run.command().equals("/vml setup"));
+        boolean linksToGame = notice.toFlatList().stream().anyMatch(part ->
                 part.getStyle().getClickEvent() instanceof net.minecraft.network.chat.ClickEvent.OpenUrl url
-                        && url.uri().toString().endsWith("/sparks?name=Steve"));
-        helper.assertTrue(notice.getString().contains("the Sparks of Steve are used up") && linksToShop, "notice: " + notice.getString());
-        helper.succeed();
-    }
-
-    /** With -Pvoxelmind.api=… and VML_E2E_VOXELMIND_TOKEN: one real tool call through the VoxelMind API. */
-    @GameTest
-    public void voxelmindApiAnswersWithTools(GameTestHelper helper) {
-        String token = System.getenv("VML_E2E_VOXELMIND_TOKEN");
-        if (token == null || token.isBlank()) {
-            helper.succeed();
-            return;
-        }
-        var probe = LlmClient.probe(com.voxelmind.local.provider.VoxelMindApi.BASE, token.trim(), "ignored/model");
-        var balance = com.voxelmind.local.provider.VoxelMindApi.balance(token.trim());
-        try {
-            java.util.concurrent.CompletableFuture.allOf(probe, balance).get(60, java.util.concurrent.TimeUnit.SECONDS);
-        } catch (Exception e) {
-            helper.fail("VoxelMind API: " + e);
-            return;
-        }
-        helper.assertTrue(probe.join().toolCalls().stream().anyMatch(c -> c.name().equals("wave")), "the model waved through the API");
-        helper.assertTrue(balance.join().total() > 0, "balance " + balance.join());
+                        && url.uri().toString().equals("https://voxel-mind.com/?utm_source=mod&utm_medium=ingame&utm_campaign=sparks_end#waitlist"));
+        helper.assertTrue(linksToSettings && linksToGame, "links to the AI settings and once to the game");
         helper.succeed();
     }
 

@@ -1,6 +1,7 @@
 package com.voxelmind.local.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.voxelmind.local.config.LocalConfig;
 import com.voxelmind.local.net.MenuPayloads;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -13,6 +14,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.PauseScreen;
+import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -46,6 +48,13 @@ public final class VoxelMindLocalClient implements ClientModInitializer {
                 else if (client.player != null) client.player.sendSystemMessage(Component.translatable("voxelmind_local.settings.server_owned"));
             }
             MenuState.tick(client);
+            // Once after an update from a config that thought with VoxelMind Sparks: on the title screen, or in a world
+            // when nothing else is open (the host's join may have said it in chat already; then the flag is gone).
+            if (LocalConfig.get().sparksEndedNotice
+                    && (client.gui.screen() instanceof TitleScreen || client.gui.screen() == null && client.player != null)
+                    && LocalConfig.takeSparksEndedNotice()) {
+                client.gui.setScreen(new SparksEndedScreen(client.gui.screen()));
+            }
         });
 
         // The old hosted VoxelMind mod puts the same button at the same spot until it is removed.

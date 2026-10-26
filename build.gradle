@@ -177,10 +177,6 @@ if (mcAtLeast(1, 21, 11)) {
     tasks.named("runGameTest") {
         if (project.hasProperty("trace")) jvmArgs "-Dvml.trace=true"
     }
-    // -PvoxelmindApi=http://127.0.0.1:8797/v1 points the dev runs and tests at a local `wrangler dev` worker.
-    tasks.matching { it.name in ["runServer", "runClient", "runGameTest", "runClientGameTest"] }.configureEach {
-        if (project.hasProperty("voxelmindApi")) jvmArgs "-Dvoxelmind.api=${project.property("voxelmindApi")}"
-    }
 }
 
 // Build order: "Set active project to <mc>", :<mc>:assemble, "Reset active project" (tools/build-all.sh).

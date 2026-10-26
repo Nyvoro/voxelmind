@@ -3,10 +3,10 @@
 AI beings for Minecraft (Fabric) that run entirely inside the mod: a **companion** with a real player body, a **builder** fairy and a **god** game master.
 - No VoxelMind server and no VoxelMind account are needed.
 - The player chooses how they think:
-  - Player2 (free daily AI power).
-  - VoxelMind Sparks: our prepaid API, see `../voxelmind-api`.
+  - Player2 (free daily AI power; new installations start here).
   - Their own OpenRouter account (in-game OAuth sign-in or a pasted key).
   - Any OpenAI-compatible endpoint such as Ollama or LM Studio.
+- VoxelMind Sparks, our prepaid AI service, ended in 2026; 0.5.1 removed it (see `CHANGELOG.md`).
 - Supported Minecraft versions: see [docs/VERSIONS.md](docs/VERSIONS.md).
 - German test guide: [ANLEITUNG.md](ANLEITUNG.md).
 
@@ -39,12 +39,10 @@ Minecraft → code observes and condenses facts → LLM sees facts, conversation
   - `GodMind` has `run`, `sequence` (server-clock command chains with per-step receipts), `rule` (standing event → command laws, rate-limited), `rain`, `move_entity`, `summon_entity`, `cleanup`, campaign and chaos settings. Its plain text stays with it, as hosted: only `say` speaks, and the timeline says what became of the text.
   - Commands run through `CommandRunner` as a captured console source. `CommandPolicy` refuses admin verbs and harmful verbs against `@a`; that is a technical safety boundary. `WorldResets` restores changed gamerules and effects when a God leaves, and `WorldBackup` zips the world once a day before a session.
   - Only the singleplayer host or an operator may bring either kind (`CompanionManager.mayHost`).
-- **VoxelMind Sparks** (`provider/VoxelMindApi`, `client/VoxelMindSignIn`):
-  - Sign-in with the Minecraft account itself: the client signs a server id with the player key Mojang certifies for chat signing (`getProfileKeyPairManager()`), and the API checks Mojang's certificate offline (Mojang refuses requests from Cloudflare). No password, Mojang token or private key leaves the PC.
-  - The resulting token (`voxelmindKey`) is only ever sent to the VoxelMind API.
-  - The model is fixed (`voxelmind/standard`), so the API routes the provider.
-  - `402` means the Sparks are used up; it becomes a chat notice with a link to packs and prices (`VmlCommand.sparksNotice`).
-  - `/vml sparks redeem <code>` posts a one-time code to `/v1/redeem` for the signed-in account; `VoxelMindApi.accountUrl` is the private account page (token in the URL fragment, never sent to the website's server).
+- **Sparks ended** (`LocalConfig.migrate`, `client/SparksEndedScreen`): a config from 0.5.0 or older whose endpoint is the
+  former VoxelMind Sparks API (`api.voxel-mind.com`) moves to Player2 once and keeps every other setting; the old Sparks sign-in
+  leaves the file. The title screen (or, on a dedicated server, the chat of the first operator who joins) says once that
+  Sparks ended and leads to the AI settings. That API can no longer be chosen as an endpoint.
 - **AI label** (`CompanionManager.labelAsAi`, `tellAboutAi`): companion bodies join the scoreboard team `voxelmind_ai` with the prefix `[AI] ` (name tag, tab list, chat); hosted minds' chat lines start with `[AI]`; every human player is told once per session which AI characters are in the world. A transparency duty (Art. 50 AI Act), not behaviour.
 - **Player2** (`provider/Player2`): `api.player2.game/v1/chat/completions` is OpenAI-compatible with tools but has no model field (Player2 chooses). Sign-in gets a `p2Key` from the running Player2 app (`127.0.0.1:4315` or `:4316`, `/v1/login/web/{clientId}`) or the OAuth device flow; it needs the Game Client ID (`Player2.CLIENT_ID` or config `player2ClientId`). Requests carry `player2-game-key: <Client ID>` (as Player2's own Minecraft engine does); while a companion is in the world a `/health` heartbeat goes out once a minute, which is how Player2 measures play time for its revenue share. `player2Key` is only ever sent to Player2.
 - **Bring your own key** (`provider/`, `client/`): `OpenRouterAccount` runs the OpenRouter OAuth PKCE sign-in (callback on a loopback port for the settings screen, the code-copy variant for `/vml login` on dedicated servers) and reads credit from `/key` and `/credits`. `ModelCatalog` reads `/models` of any endpoint and estimates cost per hour of play from list prices. `SettingsScreen` and `ModelPickerScreen` are vanilla-widget screens, opened through the `open_settings` payload that `/vml setup` sends to the host of a singleplayer or LAN world. The OpenRouter key (`apiKey`) is only ever sent to OpenRouter; other endpoints use `endpointKey`.
@@ -72,13 +70,11 @@ One source tree builds 16 jars (Minecraft 1.21 to 26.2, Stonecutter); the checke
 
 ```sh
 ./gradlew :26.2:build               # versions/26.2/build/libs/voxelmind-local-<ver>+26.2.jar
-./gradlew :26.2:runGameTest         # 132 headless server tests: body, tools, settings, Builder fill/undo and no-op fills, geometry rejections, God rain/sequence/rules and plain text, command boundary, Sparks config, AI label, one mind against a stub endpoint, doors, placed blocks, building among trees, surfacing, knockback, melee technique, threat events
-./gradlew :26.2:runClientGameTest   # real client: summon, skin, chat, settings, model list, menu, monitor, memories, create companion/builder/god by clicks, screenshots
+./gradlew :26.2:runGameTest         # 141 headless server tests: body, tools, settings, Builder fill/undo and no-op fills, geometry rejections, God rain/sequence/rules and plain text, command boundary, Sparks migration, AI label, one mind against a stub endpoint, doors, placed blocks, building among trees, surfacing, knockback, melee technique, threat events
+./gradlew :26.2:runClientGameTest   # real client: the Sparks-ended notice, summon, skin, chat, settings, model list, menu, monitor, memories, create companion/builder/god by clicks, screenshots
 ./gradlew :26.2:runServer           # dedicated dev server in run/ (port 25599, offline mode)
-./gradlew :26.2:runServer -PvoxelmindApi=http://127.0.0.1:8797/v1     # against a local `wrangler dev` VoxelMind API (also runClient, runGameTest)
-./gradlew :26.2:runGameTest -PvoxelmindApi=http://127.0.0.1:8797/v1   # with VML_E2E_VOXELMIND_TOKEN: one real call through a local VoxelMind API
 ```
 
-End-to-end with a real model: start `runServer` with `VOXELMIND_LOCAL_API_KEY` set (a new config starts on VoxelMind Sparks; the key is used once the endpoint is OpenRouter: `/vml endpoint openrouter` in a fresh `run/`), then drive an owner with `node tools/e2e/owner-bot.cjs tools/e2e/scenarios/<file>.json Lysa`. For Builder and God the bot must be an operator (`run/ops.json`), as in `hosted-builder-god.json` (uses the patched mineflayer from `../voxelmind-platform`). `tools/e2e/map.cjs` prints built structures; `tools/e2e/provider_bench.py` compares OpenRouter providers.
+End-to-end with a real model: start `runServer` with `VOXELMIND_LOCAL_API_KEY` set (a new config starts on Player2; the key is used once the endpoint is OpenRouter: `/vml endpoint openrouter` in a fresh `run/`), then drive an owner with `node tools/e2e/owner-bot.cjs tools/e2e/scenarios/<file>.json Lysa`. For Builder and God the bot must be an operator (`run/ops.json`), as in `hosted-builder-god.json` (uses the patched mineflayer from `../voxelmind-platform`). `tools/e2e/map.cjs` prints built structures; `tools/e2e/provider_bench.py` compares OpenRouter providers.
 
-Config: `config/voxelmind-local.json` (`apiKey`, `endpointKey`, `baseUrl` (new configs: VoxelMind Sparks), `model`, `memoryModel` (empty = same as `model`), `providerOrder`, `language`, `maxRequestsPerMinute`, `idleOwnerAwayMinutes`, `requestTimeoutSeconds`, `localRequestTimeoutSeconds`, `logPrompts`, …). Written whole or not at all; a file that cannot be read is kept as `voxelmind-local.json.broken-<time>`.
+Config: `config/voxelmind-local.json` (`apiKey`, `endpointKey`, `baseUrl` (new configs: Player2), `model`, `memoryModel` (empty = same as `model`), `providerOrder`, `language`, `maxRequestsPerMinute`, `idleOwnerAwayMinutes`, `requestTimeoutSeconds`, `localRequestTimeoutSeconds`, `logPrompts`, …). Written whole or not at all; a file that cannot be read is kept as `voxelmind-local.json.broken-<time>`.

@@ -142,9 +142,7 @@ public class SkinGameTests {
     @GameTest
     public void usageCountNamesOnlyTheKindOfService(GameTestHelper helper) {
         var config = new com.voxelmind.local.config.LocalConfig();
-        helper.assertTrue(UsageStats.kind(config).equals("sparks"), "a new config is on Sparks");
-        config.selectEndpoint(com.voxelmind.local.provider.Player2.WEB);
-        helper.assertTrue(UsageStats.kind(config).equals("player2"), "Player2");
+        helper.assertTrue(UsageStats.kind(config).equals("player2"), "a new config starts on Player2");
         config.selectEndpoint(com.voxelmind.local.config.LocalConfig.OPENROUTER_URL);
         helper.assertTrue(UsageStats.kind(config).equals("openrouter"), "OpenRouter");
         for (String url : new String[] {"http://localhost:11434/v1", "http://127.0.0.1:1234/v1", "http://192.168.1.20:11434/v1", "http://[::1]:11434/v1", "http://gpu-box.local:8080/v1"}) {

@@ -32,7 +32,7 @@ public final class VmlCommand {
     private VmlCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        // The AI settings hold keys and the Sparks token: the singleplayer host, the console or an owner-level
+        // The AI settings hold keys and sign-ins: the singleplayer host, the console or an owner-level
         // operator may change them, never a command block or a datapack function (those run at level 2).
         Predicate<CommandSourceStack> admin = src -> Commands.hasPermission(Commands.LEVEL_OWNERS).test(src)
                 || src.getPlayer() != null && src.getServer().isSingleplayerOwner(src.getPlayer().nameAndId());
@@ -110,9 +110,6 @@ public final class VmlCommand {
                 .then(Commands.literal("stats").executes(ctx -> stats(ctx, null))
                         .then(Commands.literal("on").requires(admin).executes(ctx -> stats(ctx, true)))
                         .then(Commands.literal("off").requires(admin).executes(ctx -> stats(ctx, false))))
-                .then(Commands.literal("sparks").executes(VmlCommand::sparks)
-                        .then(Commands.literal("redeem").requires(admin)
-                                .then(Commands.argument("code", StringArgumentType.greedyString()).executes(VmlCommand::redeem))))
                 .then(Commands.literal("setup").executes(ctx -> setup(ctx, admin.test(ctx.getSource()))))
                 .then(Commands.literal("test").requires(admin).executes(VmlCommand::test))
                 .then(Commands.literal("login").requires(admin)
@@ -191,32 +188,22 @@ public final class VmlCommand {
                 .append(" ").append(more).append(" ").append(other);
     }
 
-    /** Name of the Sparks account this world thinks with (its token's account), or {@code fallback} before it is known. */
-    public static String sparksAccount(String fallback) {
-        String name = LocalConfig.get().voxelmindName;
-        return name == null || name.isBlank() ? fallback : name;
-    }
-
-    /** Sparks used up: what that means and the ways on. The link names the account the world spends, not the companion's owner. */
-    public static MutableComponent sparksNotice(String name, String owner) {
-        String account = sparksAccount(owner);
-        MutableComponent buy = Component.translatableWithFallback("voxelmind_local.notice.sparks.buy", "[Packs and prices]").withStyle(style -> style
-                .withColor(ChatFormatting.AQUA).withUnderlined(true)
-                .withClickEvent(new ClickEvent.OpenUrl(java.net.URI.create(com.voxelmind.local.provider.VoxelMindApi.buyUrl(account))))
-                .withHoverEvent(new HoverEvent.ShowText(Component.literal(com.voxelmind.local.provider.VoxelMindApi.buyUrl(account)))));
-        MutableComponent other = Component.translatableWithFallback("voxelmind_local.notice.joules.other", "[Choose another AI]").withStyle(style -> style
-                .withColor(ChatFormatting.AQUA).withUnderlined(true)
-                .withClickEvent(new ClickEvent.RunCommand("/vml setup")));
+    /**
+     * VoxelMind Sparks ended in 2026: told once to the host or an owner-level operator of a world whose config still used it
+     * (LocalConfig.migrate), with the way to the AI settings and one line about the game VoxelMind becomes.
+     */
+    public static MutableComponent sparksEndedNotice() {
         return Component.literal("[VoxelMind] ").withStyle(ChatFormatting.GOLD)
-                .append(Component.translatableWithFallback("voxelmind_local.notice.sparks",
-                        "%s cannot think right now: the Sparks of %s are used up. New free Sparks come tomorrow. Other ways to think: Player2, your own key, a local model.",
-                        name, account).withStyle(ChatFormatting.GOLD))
-                .append(" ").append(buy).append(" ").append(other);
-    }
-
-    /** The notice for whichever prepaid AI power ran out. */
-    public static MutableComponent emptyNotice(String name, String owner) {
-        return LocalConfig.get().isVoxelMind() ? sparksNotice(name, owner) : joulesNotice(name);
+                .append(Component.translatableWithFallback("voxelmind_local.notice.sparks_ended",
+                        "VoxelMind Sparks has ended. Choose another AI provider (your own key) or a local model to keep your companions thinking.")
+                        .withStyle(ChatFormatting.GOLD))
+                .append(" ").append(settingsLink())
+                .append("\n").append(Component.translatableWithFallback("voxelmind_local.game",
+                        "We're building VoxelMind into its own game where AI villagers live on their own:").withStyle(ChatFormatting.GRAY))
+                .append(" ").append(Component.literal("voxel-mind.com").withStyle(style -> style
+                        .withColor(ChatFormatting.AQUA).withUnderlined(true)
+                        .withClickEvent(new ClickEvent.OpenUrl(java.net.URI.create(com.voxelmind.local.VoxelMindLocal.GAME_URL)))
+                        .withHoverEvent(new HoverEvent.ShowText(Component.literal(com.voxelmind.local.VoxelMindLocal.GAME_URL)))));
     }
 
     /** Clickable "[AI settings]" that opens the settings screen for the host, or says who sets up the AI elsewhere. */
@@ -225,14 +212,14 @@ public final class VmlCommand {
                 .withColor(ChatFormatting.AQUA).withUnderlined(true)
                 .withClickEvent(new ClickEvent.RunCommand("/vml setup"))
                 .withHoverEvent(new HoverEvent.ShowText(Component.translatableWithFallback("voxelmind_local.notice.settings.hover",
-                        "Choose how your AI beings think: VoxelMind Sparks, Player2, your OpenRouter account or a local model"))));
+                        "Choose how your AI beings think: Player2, your own key (e.g. OpenRouter) or a local model"))));
     }
 
-    /** "<name> has no AI connected yet" with the four ways and the settings link. */
+    /** "<name> has no AI connected yet" with the three ways and the settings link. */
     public static MutableComponent noAiNotice(String name) {
         return Component.literal("[VoxelMind] ").withStyle(ChatFormatting.GOLD)
                 .append(Component.translatableWithFallback("voxelmind_local.notice.no_ai",
-                        "%s has no AI connected yet. Choose VoxelMind Sparks (sign in with your Minecraft account, welcome Sparks included), Player2, your OpenRouter account or a local model:",
+                        "%s has no AI connected yet. Choose Player2 (free), your own key (e.g. OpenRouter) or a local model:",
                         name).withStyle(ChatFormatting.GOLD))
                 .append(" ").append(settingsLink());
     }
@@ -275,11 +262,11 @@ public final class VmlCommand {
                 /vml skin <name> <account|PNG link|file.png> [slim]  a Minecraft account's skin or your own PNG
                 /vml mode <name> normal|hardcore  hardcore: one life, a death is final
                 /vml worlds <name> this|all     only this world, or with you into all your worlds
-                /vml list · /vml status · /vml sparks · /vml sparks redeem <code>
+                /vml list · /vml status
                 /vml setup                      AI settings: sign-in, key, model
                 /vml login · /vml key <key> · /vml models [search] · /vml model <id>
                 /vml player2                    free AI with a Player2 account (sign in with a code)
-                /vml endpoint openrouter|player2|voxelmind|ollama|lmstudio|<url> · /vml test · /vml reload
+                /vml endpoint player2|openrouter|ollama|lmstudio|<url> · /vml test · /vml reload
                 /vml stats [on|off]             anonymous daily count of which kind of AI service is used
                 /vml brain [<name> <brain>]      list the brains, or choose how a companion thinks
                 /vml brain new <id> · /vml brain reload · /vml brain guide   build your own brain
@@ -515,81 +502,12 @@ public final class VmlCommand {
         return 1;
     }
 
-    /** "54.0 Sparks + 10 free today (≈ 64 min of play with the standard model)". */
-    public static String sparks(com.voxelmind.local.provider.VoxelMindApi.Balance b) {
-        String free = b.freeCapReached() ? "today's free Sparks are used up for everyone" : String.format(Locale.ROOT, "%.0f free today", b.free());
-        return String.format(Locale.ROOT, "%.1f Sparks + %s (≈ %.0f min of play with the standard model)", b.sparks(), free, b.total());
-    }
-
-    /** Sparks balance, the shop link and, for the host, the token for a dedicated server. */
-    private static int sparks(CommandContext<CommandSourceStack> ctx) {
-        LocalConfig cfg = LocalConfig.get();
-        var source = ctx.getSource();
-        ServerPlayer player = source.getPlayer();
-        String token = cfg.voxelmindKey == null ? "" : cfg.voxelmindKey.trim();
-        if (!cfg.isVoxelMind() || token.isEmpty()) {
-            String name = player == null ? "" : player.getGameProfile().name();
-            source.sendSuccess(() -> Component.translatableWithFallback("voxelmind_local.sparks.about",
-                    "VoxelMind Sparks: our own AI service, one Spark is about one minute of play. Sign in with your Minecraft account under /vml setup → VoxelMind Sparks (welcome Sparks included). Packs and prices:")
-                    .append(" ").append(buyLink(name)), false);
-            return 1;
-        }
-        com.voxelmind.local.provider.VoxelMindApi.balance(token).whenComplete((b, error) -> source.getServer().execute(() -> {
-            if (error != null) {
-                source.sendFailure(Component.literal("VoxelMind: " + message(error)));
-                return;
-            }
-            // Packs for the account this world spends (the token's), whoever asks.
-            MutableComponent line = Component.literal("VoxelMind (" + b.name() + "): " + sparks(b) + " ").append(buyLink(b.name()));
-            boolean host = player != null && source.getServer().isSingleplayerOwner(player.nameAndId());
-            if (host) {
-                line.append(" ").append(Component.translatableWithFallback("voxelmind_local.sparks.account", "[Account]").withStyle(style -> style
-                        .withColor(ChatFormatting.AQUA).withUnderlined(true)
-                        .withClickEvent(new ClickEvent.OpenUrl(java.net.URI.create(com.voxelmind.local.provider.VoxelMindApi.accountUrl(token))))
-                        .withHoverEvent(new HoverEvent.ShowText(Component.translatableWithFallback("voxelmind_local.sparks.account.hover",
-                                "Balance, spending per day and credits. A private link: it contains your sign-in.")))));
-                line.append(" ").append(Component.translatableWithFallback("voxelmind_local.sparks.copy", "[Copy token for a server]").withStyle(style -> style
-                        .withColor(ChatFormatting.GRAY).withUnderlined(true)
-                        .withClickEvent(new ClickEvent.CopyToClipboard(token))
-                        .withHoverEvent(new HoverEvent.ShowText(Component.literal("On a dedicated server: /vml endpoint voxelmind, then /vml key <token>")))));
-            }
-            source.sendSuccess(() -> line, false);
-        }));
-        return 1;
-    }
-
-    private static MutableComponent buyLink(String name) {
-        return Component.translatableWithFallback("voxelmind_local.notice.sparks.buy", "[Packs and prices]").withStyle(style -> style
-                .withColor(ChatFormatting.AQUA).withUnderlined(true)
-                .withClickEvent(new ClickEvent.OpenUrl(java.net.URI.create(com.voxelmind.local.provider.VoxelMindApi.buyUrl(name))))
-                .withHoverEvent(new HoverEvent.ShowText(Component.literal(com.voxelmind.local.provider.VoxelMindApi.buyUrl(name)))));
-    }
-
-    /** Redeems a Sparks code (e.g. from the email to former subscribers) for the account this world thinks with. */
-    private static int redeem(CommandContext<CommandSourceStack> ctx) {
-        LocalConfig cfg = LocalConfig.get();
-        var source = ctx.getSource();
-        String token = cfg.voxelmindKey == null ? "" : cfg.voxelmindKey.trim();
-        if (token.isEmpty()) {
-            return fail(ctx, "Sign in with your Minecraft account first: /vml setup → VoxelMind Sparks. Or redeem the code for any name at "
-                    + com.voxelmind.local.provider.VoxelMindApi.SITE + "/sparks/redeem");
-        }
-        String code = StringArgumentType.getString(ctx, "code").trim();
-        com.voxelmind.local.provider.VoxelMindApi.redeem(token, code).whenComplete((sparks, error) -> source.getServer().execute(() -> {
-            if (error != null) source.sendFailure(Component.literal("VoxelMind: " + message(error)));
-            else source.sendSuccess(() -> Component.translatableWithFallback("voxelmind_local.sparks.redeemed",
-                    "%s Sparks were added to the account of %s. /vml sparks shows the balance.",
-                    String.format(Locale.ROOT, "%.0f", sparks), sparksAccount("this world")).withStyle(ChatFormatting.GREEN), false);
-        }));
-        return 1;
-    }
-
     private static int status(CommandContext<CommandSourceStack> ctx) {
         LocalConfig cfg = LocalConfig.get();
         String key = cfg.effectiveApiKey();
         String masked = key.isEmpty() ? "none" : key.substring(0, Math.min(8, key.length())) + "…";
         ModelCatalog.Model listed = ModelCatalog.find(cfg.model);
-        info(ctx, "Endpoint: " + cfg.baseUrl + "\nModel: " + (cfg.isPlayer2() ? "chosen by Player2" : cfg.isVoxelMind() ? "VoxelMind Standard" : cfg.model) + (listed != null ? " (" + ModelCatalog.priceLine(listed) + ")" : "")
+        info(ctx, "Endpoint: " + cfg.baseUrl + "\nModel: " + (cfg.isPlayer2() ? "chosen by Player2" : cfg.model) + (listed != null ? " (" + ModelCatalog.priceLine(listed) + ")" : "")
                 + (cfg.effectiveMemoryModel().equals(cfg.model) ? "" : "\nMemory model: " + cfg.effectiveMemoryModel())
                 + (cfg.isOpenRouter() && cfg.providerOrder != null && !cfg.providerOrder.isEmpty()
                         ? "\nProviders: " + String.join(" → ", cfg.providerOrder) : "")
@@ -600,13 +518,6 @@ public final class VmlCommand {
             Player2.balance(key).whenComplete((b, error) -> source.getServer().execute(() -> {
                 if (error != null) source.sendFailure(Component.literal("Player2: " + message(error)));
                 else source.sendSuccess(() -> Component.literal("Player2: " + balance(b)), false);
-            }));
-        }
-        if (cfg.isVoxelMind() && !key.isEmpty()) {
-            var source = ctx.getSource();
-            com.voxelmind.local.provider.VoxelMindApi.balance(key).whenComplete((b, error) -> source.getServer().execute(() -> {
-                if (error != null) source.sendFailure(Component.literal("VoxelMind: " + message(error)));
-                else source.sendSuccess(() -> Component.literal("VoxelMind: " + sparks(b)), false);
             }));
         }
         if (cfg.isOpenRouter() && !key.isEmpty()) {
@@ -687,8 +598,7 @@ public final class VmlCommand {
             return 1;
         }
         // On a dedicated server the settings belong to the server, not to this player's game.
-        info(ctx, "Settings of this server: VoxelMind Sparks with /vml endpoint voxelmind and /vml key <token> (\"Copy token\" in the "
-                + "singleplayer settings), Player2 with /vml player2, OpenRouter with /vml login or /vml key <key> and /vml models, "
+        info(ctx, "Settings of this server: Player2 with /vml player2, OpenRouter with /vml login or /vml key <key> and /vml models, "
                 + "or /vml endpoint ollama|lmstudio|<url> for a local model. /vml test checks it.");
         return 1;
     }
@@ -783,25 +693,8 @@ public final class VmlCommand {
     private static int key(CommandContext<CommandSourceStack> ctx) {
         LocalConfig config = LocalConfig.get();
         config.setKey(StringArgumentType.getString(ctx, "key"));
-        if (config.isVoxelMind()) config.voxelmindName = "";
         LocalConfig.save();
         ok(ctx, "Key for " + config.baseUrl + " saved to " + LocalConfig.path() + ".");
-        if (config.isVoxelMind()) {
-            // A token pasted on a server: learn whose Sparks it spends, for the links and notices.
-            var source = ctx.getSource();
-            String token = config.voxelmindKey;
-            com.voxelmind.local.provider.VoxelMindApi.balance(token).whenComplete((b, error) -> source.getServer().execute(() -> {
-                if (error != null) {
-                    source.sendFailure(Component.literal("VoxelMind: " + message(error)));
-                    return;
-                }
-                if (!token.equals(LocalConfig.get().voxelmindKey)) return;
-                LocalConfig.get().voxelmindName = b.name();
-                LocalConfig.save();
-                source.sendSuccess(() -> Component.literal("This world now thinks with the Sparks of " + b.name() + ": " + sparks(b) + ".")
-                        .withStyle(ChatFormatting.GREEN), false);
-            }));
-        }
         return 1;
     }
 
@@ -824,22 +717,22 @@ public final class VmlCommand {
             "openrouter", LocalConfig.OPENROUTER_URL,
             "player2", Player2.WEB,
             "ollama", "http://localhost:11434/v1",
-            "lmstudio", "http://localhost:1234/v1",
-            "voxelmind", com.voxelmind.local.provider.VoxelMindApi.BASE);
+            "lmstudio", "http://localhost:1234/v1");
 
     private static int endpoint(CommandContext<CommandSourceStack> ctx) {
         String arg = StringArgumentType.getString(ctx, "endpoint").trim();
         String url = ENDPOINTS.getOrDefault(arg.toLowerCase(Locale.ROOT), arg);
+        if (arg.equalsIgnoreCase("voxelmind") || LocalConfig.isSparks(url)) {
+            return fail(ctx, "VoxelMind Sparks has ended. Choose another AI provider (your own key) or a local model: player2, openrouter, ollama, lmstudio or a URL.");
+        }
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            return fail(ctx, "Use voxelmind, player2, openrouter, ollama, lmstudio or a URL like http://localhost:11434/v1");
+            return fail(ctx, "Use player2, openrouter, ollama, lmstudio or a URL like http://localhost:11434/v1");
         }
         LocalConfig.get().selectEndpoint(url);
         LocalConfig.save();
         LocalConfig config = LocalConfig.get();
         ok(ctx, "Endpoint set to " + config.baseUrl + (config.isPlayer2()
                 ? (config.hasCredentials() ? "." : ". Connect your Player2 account with /vml player2.")
-                : config.isVoxelMind()
-                ? (config.hasCredentials() ? "." : ". Add the token with /vml key <token> (\"Copy token\" in the singleplayer AI settings).")
                 : ". Pick one of its models with /vml models."));
         return 1;
     }

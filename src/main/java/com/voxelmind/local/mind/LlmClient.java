@@ -48,10 +48,6 @@ public final class LlmClient {
         boolean player2() {
             return com.voxelmind.local.provider.Player2.isPlayer2(baseUrl);
         }
-
-        boolean voxelmind() {
-            return com.voxelmind.local.provider.VoxelMindApi.isVoxelMind(baseUrl);
-        }
     }
 
     /** One tool call as the model sent it. {@code arguments} is null when the JSON could not be parsed. */
@@ -116,16 +112,6 @@ public final class LlmClient {
         return error instanceof LlmException e && e.status == 402 && LocalConfig.get().isPlayer2();
     }
 
-    /** The VoxelMind API answered that the player's Sparks are used up. */
-    public static boolean outOfSparks(Throwable error) {
-        return error instanceof LlmException e && e.status == 402 && LocalConfig.get().isVoxelMind();
-    }
-
-    /** The prepaid AI power of the chosen service is used up (Player2 joules or VoxelMind Sparks). */
-    public static boolean outOfPrepaid(Throwable error) {
-        return outOfJoules(error) || outOfSparks(error);
-    }
-
     /**
      * One small request with a single tool to a not yet saved endpoint, so the settings screen can show
      * whether key, model and tool calls work before anything is stored.
@@ -148,8 +134,7 @@ public final class LlmClient {
         user.addProperty("role", "user");
         user.addProperty("content", "A player says hello. Wave at them with the wave tool.");
         messages.add(user);
-        boolean hosted = LocalConfig.isHost(baseUrl, "openrouter.ai") || com.voxelmind.local.provider.Player2.isPlayer2(baseUrl)
-                || com.voxelmind.local.provider.VoxelMindApi.isVoxelMind(baseUrl);
+        boolean hosted = LocalConfig.isHost(baseUrl, "openrouter.ai") || com.voxelmind.local.provider.Player2.isPlayer2(baseUrl);
         LocalConfig config = LocalConfig.get();
         Endpoint endpoint = new Endpoint(baseUrl, key, hosted ? Math.max(40, config.requestTimeoutSeconds) : config.localRequestTimeoutSeconds);
         return attempt(endpoint, model, messages, tools, true, 0.2, 256, null, null, List.of(), 0);
@@ -214,9 +199,7 @@ public final class LlmClient {
                                                     @Nullable JsonObject responseFormat, @Nullable String reasoning, @Nullable String provider) {
         JsonObject body = new JsonObject();
         // Player2 chooses the model from the player's account; its API has no model field.
-        // The VoxelMind API has one model and picks the provider itself.
-        if (endpoint.voxelmind()) body.addProperty("model", com.voxelmind.local.provider.VoxelMindApi.MODEL);
-        else if (!endpoint.player2()) body.addProperty("model", model);
+        if (!endpoint.player2()) body.addProperty("model", model);
         body.add("messages", messages);
         if (tools != null && !tools.isEmpty()) {
             body.add("tools", tools);
@@ -225,7 +208,7 @@ public final class LlmClient {
         body.addProperty("temperature", temperature);
         body.addProperty("max_tokens", maxTokens);
         if (responseFormat != null) body.add("response_format", responseFormat);
-        if (endpoint.openRouter() || endpoint.voxelmind()) {
+        if (endpoint.openRouter()) {
             JsonObject thinking = new JsonObject();
             if (reasoning != null) {
                 thinking.addProperty("enabled", true);
@@ -325,14 +308,11 @@ public final class LlmClient {
         String message = error.getMessage() != null ? error.getMessage() : error.toString();
         String hint = "";
         boolean player2 = LocalConfig.get().isPlayer2();
-        boolean voxelmind = LocalConfig.get().isVoxelMind();
         if (error instanceof LlmException e) {
             hint = switch (e.status) {
-                case 401 -> voxelmind ? "The VoxelMind sign-in is no longer valid. Sign in with Minecraft again in the settings."
-                        : player2 ? "Player2 no longer accepts the sign-in. Connect Player2 again in the settings."
+                case 401 -> player2 ? "Player2 no longer accepts the sign-in. Connect Player2 again in the settings."
                         : "The key was not accepted. Sign in again or paste a new key.";
-                case 402 -> voxelmind ? "The Sparks are used up; new free Sparks come tomorrow. Packs and prices: " + com.voxelmind.local.provider.VoxelMindApi.buyUrl(null) + "."
-                        : player2 ? "The Player2 AI power (joules) is used up for now; it recharges daily, or see " + com.voxelmind.local.provider.Player2.PROFILE_URL + "."
+                case 402 -> player2 ? "The Player2 AI power (joules) is used up for now; it recharges daily, or see " + com.voxelmind.local.provider.Player2.PROFILE_URL + "."
                         : "The credit on this key is used up. Top up at openrouter.ai/settings/credits or pick a cheaper model.";
                 case 404 -> "The endpoint does not offer this model. Pick another one.";
                 case 429 -> "The provider is rate limiting; it will retry by itself.";

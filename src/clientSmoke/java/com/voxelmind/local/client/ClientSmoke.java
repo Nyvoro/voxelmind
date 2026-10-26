@@ -127,11 +127,18 @@ public final class ClientSmoke implements ClientModInitializer {
             if (!(mc.gui.screen() instanceof CompanionEditScreen edit)) throw new IllegalStateException("no edit screen");
             edit.openBrainList();
         }));
+        // tools/smoke-client.sh starts from a 0.5.0 config on VoxelMind Sparks: the mod moved it to Player2; the notice renders.
+        steps.add(new Step("sparks ended notice", 40, mc -> {
+            var config = com.voxelmind.local.config.LocalConfig.get();
+            if (!config.isPlayer2()) throw new IllegalStateException("the Sparks config was not moved to Player2: " + config.baseUrl);
+            mc.gui.setScreen(new SparksEndedScreen(mc.gui.screen()));
+        }));
         steps.add(new Step("settings screen", 40, mc -> mc.gui.setScreen(new SettingsScreen(mc.gui.screen()))));
         // Players on 1.21.10 reported that "AI from" stays on Player2: click it like a player, once per provider.
         steps.add(new Step("settings: AI from goes through every provider", 20, mc -> {
             List<String> seen = new ArrayList<>();
-            for (int i = 0; i < 7; i++) {
+            int providers = SettingsScreen.Endpoint.values().length;
+            for (int i = 0; i <= providers; i++) {
                 Screen current = mc.gui.screen();
                 net.minecraft.client.gui.components.CycleButton<?> cycle = null;
                 for (var child : current.children()) {
@@ -154,7 +161,7 @@ public final class ClientSmoke implements ClientModInitializer {
                 *///?}
             }
             LOG.info("VML-SMOKE settings cycle {}", seen);
-            if (seen.stream().distinct().count() < 6) throw new IllegalStateException("AI from got stuck: " + seen);
+            if (seen.stream().distinct().count() < providers) throw new IllegalStateException("AI from got stuck: " + seen);
         }));
         steps.add(new Step("model picker", 80, mc -> mc.gui.setScreen(new ModelPickerScreen(mc.gui.screen(),
                 "https://openrouter.ai/api/v1", "", "deepseek/deepseek-v4-flash-0731", id -> { }))));

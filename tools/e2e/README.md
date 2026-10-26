@@ -19,7 +19,7 @@ Run the same scenarios on the baseline build (master, `0c068b5`) and on the buil
    VOXELMIND_LOCAL_API_KEY="$OPENROUTER_API_KEY" ./gradlew :26.2:runServer          # bash
    $env:VOXELMIND_LOCAL_API_KEY = $env:OPENROUTER_API_KEY; .\gradlew :26.2:runServer  # PowerShell
    ```
-3. **OpenRouter endpoint** (a new config starts on VoxelMind Sparks): `node tools/e2e/owner-bot.cjs tools/e2e/scenarios/setup-openrouter.json` must print `Endpoint: https://openrouter.ai/api/v1` and `Key: sk-or-v1…`.
+3. **OpenRouter endpoint** (a new config starts on Player2): `node tools/e2e/owner-bot.cjs tools/e2e/scenarios/setup-openrouter.json` must print `Endpoint: https://openrouter.ai/api/v1` and `Key: sk-or-v1…`.
 4. **Scenarios.** The bot is `VmlOwner`; the second argument names the companion. One name per scenario (3-16 letters, digits, `_`) gives each its own log and no shared memories; each scenario ends with `/vml dismiss`, so the companion does not rejoin with the owner in the next one.
    ```sh
    for s in 10-patch-hole 11-house-door 12-mine-from-house 13-chatty-plan; do

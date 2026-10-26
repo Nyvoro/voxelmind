@@ -8,7 +8,6 @@ import com.voxelmind.local.mind.LlmClient;
 import com.voxelmind.local.provider.ModelCatalog;
 import com.voxelmind.local.provider.OpenRouterAccount;
 import com.voxelmind.local.provider.Player2;
-import com.voxelmind.local.provider.VoxelMindApi;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -26,12 +25,11 @@ import org.jspecify.annotations.Nullable;
 import java.util.Locale;
 
 /**
- * Where the companions of the hosted world think: OpenRouter with the player's own account or key,
+ * Where the companions of the hosted world think: Player2, OpenRouter with the player's own account or key,
  * or a local OpenAI-compatible server. Nothing is stored before "Done", except a key from a sign-in.
  */
 public final class SettingsScreen extends Screen {
     enum Endpoint {
-        VOXELMIND(VoxelMindApi.BASE),
         PLAYER2(Player2.WEB),
         OPENROUTER(LocalConfig.OPENROUTER_URL),
         OLLAMA("http://localhost:11434/v1"),
@@ -62,8 +60,6 @@ public final class SettingsScreen extends Screen {
     private String openRouterKey;
     private String endpointKey;
     private String player2Key;
-    private String voxelmindKey;
-    private boolean voxelmindStarting;
     private String model;
     private Component account = Component.empty();
     private Component status = Component.empty();
@@ -84,7 +80,6 @@ public final class SettingsScreen extends Screen {
         openRouterKey = config.apiKey == null ? "" : config.apiKey;
         endpointKey = config.endpointKey == null ? "" : config.endpointKey;
         player2Key = config.player2Key == null ? "" : config.player2Key;
-        voxelmindKey = config.voxelmindKey == null ? "" : config.voxelmindKey;
         model = config.model;
         refreshAccount();
     }
@@ -101,7 +96,6 @@ public final class SettingsScreen extends Screen {
 
     private String key() {
         if (endpoint == Endpoint.PLAYER2) return player2Key.trim();
-        if (endpoint == Endpoint.VOXELMIND) return voxelmindKey.trim();
         if (endpoint != Endpoint.OPENROUTER) return endpointKey.trim();
         if (!openRouterKey.isBlank()) return openRouterKey.trim();
         String env = System.getenv("VOXELMIND_LOCAL_API_KEY");
@@ -178,34 +172,6 @@ public final class SettingsScreen extends Screen {
             testAndFooter(x, y);
             return;
         }
-        if (endpoint == Endpoint.VOXELMIND) {
-            Button signIn = Button.builder(tr(voxelmindStarting ? "voxelmind.starting" : voxelmindKey.isBlank() ? "voxelmind.sign_in" : "voxelmind.reconnect"),
-                    b -> startVoxelMind()).bounds(x, y, WIDTH, 20).build();
-            signIn.active = !voxelmindStarting;
-            signIn.setTooltip(Tooltip.create(tr("voxelmind.tooltip")));
-            addRenderableWidget(signIn);
-            y += 22;
-            accountY = y;
-            y += 24;
-            String name = minecraft.getUser().getName();
-            // Signed in: the private account page (balance, spending, buying); otherwise the shop.
-            boolean signedIn = !voxelmindKey.isBlank();
-            addRenderableWidget(Button.builder(tr(signedIn ? "voxelmind.account" : "voxelmind.buy"), b -> Util.getPlatform().openUri(
-                            signedIn ? VoxelMindApi.accountUrl(voxelmindKey.trim()) : VoxelMindApi.buyUrl(name)))
-                    .bounds(x, y, WIDTH / 2 - 2, 20).build());
-            Button copy = Button.builder(tr("voxelmind.copy"), b -> {
-                minecraft.keyboardHandler.setClipboard(voxelmindKey.trim());
-                setStatus(tr("voxelmind.copied"), MUTED);
-            }).bounds(x + WIDTH / 2 + 2, y, WIDTH / 2 - 2, 20).build();
-            copy.active = !voxelmindKey.isBlank();
-            copy.setTooltip(Tooltip.create(tr("voxelmind.copy.tooltip")));
-            addRenderableWidget(copy);
-            y += 22;
-            modelInfoY = y;
-            y += 14;
-            testAndFooter(x, y);
-            return;
-        }
         if (endpoint == Endpoint.CUSTOM) {
             EditBox url = new EditBox(font, x, y, WIDTH, 20, tr("url"));
             url.setMaxLength(300);
@@ -276,7 +242,6 @@ public final class SettingsScreen extends Screen {
 
     private Component modelInfo() {
         if (endpoint == Endpoint.PLAYER2) return tr("model.player2.info");
-        if (endpoint == Endpoint.VOXELMIND) return tr("model.voxelmind.info");
         ModelCatalog.Model listed = null;
         for (ModelCatalog.Model m : ModelCatalog.cached(baseUrl())) if (m.id().equals(model)) listed = m;
         if (listed == null) return ModelCatalog.cached(baseUrl()).isEmpty() ? Component.empty() : tr("model.unlisted");
@@ -291,21 +256,6 @@ public final class SettingsScreen extends Screen {
     }
 
     private void refreshAccount() {
-        if (endpoint == Endpoint.VOXELMIND) {
-            String key = key();
-            if (key.isEmpty()) {
-                account = tr("account.voxelmind.none");
-                return;
-            }
-            account = tr("account.checking");
-            VoxelMindApi.balance(key).whenComplete((b, error) -> minecraft.execute(() -> {
-                if (endpoint != Endpoint.VOXELMIND || !key.equals(key())) return;
-                account = error != null
-                        ? failed(error, "account.voxelmind.rejected")
-                        : tr("account.voxelmind.ok", b.name(), VmlCommand.sparks(b));
-            }));
-            return;
-        }
         if (endpoint == Endpoint.PLAYER2) {
             String key = key();
             if (key.isEmpty()) {
@@ -409,27 +359,6 @@ public final class SettingsScreen extends Screen {
         }));
     }
 
-    /** Signs in with the Minecraft account this game runs with; new accounts get welcome Sparks. */
-    private void startVoxelMind() {
-        voxelmindStarting = true;
-        setStatus(tr("voxelmind.starting"), MUTED);
-        rebuildWidgets();
-        VoxelMindSignIn.start().whenComplete((login, error) -> minecraft.execute(() -> {
-            voxelmindStarting = false;
-            if (error != null) {
-                Throwable cause = error.getCause() != null ? error.getCause() : error;
-                setStatus(tr("voxelmind.failed", String.valueOf(cause.getMessage())), BAD);
-            } else {
-                voxelmindKey = login.token();
-                setStatus(login.welcome() > 0
-                        ? tr("voxelmind.done.welcome", login.name(), String.format(Locale.ROOT, "%.0f", login.welcome()))
-                        : tr("voxelmind.done", login.name()), GOOD);
-                refreshAccount();
-            }
-            rebuildWidgets();
-        }));
-    }
-
     private void connectedPlayer2(String key) {
         Player2.adopt(key);
         player2Key = key;
@@ -440,11 +369,15 @@ public final class SettingsScreen extends Screen {
     private void test() {
         String base = baseUrl();
         String key = key();
-        if ((endpoint == Endpoint.OPENROUTER || endpoint == Endpoint.PLAYER2 || endpoint == Endpoint.VOXELMIND) && key.isEmpty()) {
-            setStatus(tr(endpoint == Endpoint.PLAYER2 ? "test.no_player2" : endpoint == Endpoint.VOXELMIND ? "test.no_voxelmind" : "test.no_key"), BAD);
+        if (LocalConfig.isSparks(base)) {
+            setStatus(tr("sparks_ended"), BAD);
             return;
         }
-        setStatus(tr("test.running", endpoint == Endpoint.PLAYER2 ? "Player2" : endpoint == Endpoint.VOXELMIND ? "VoxelMind" : model), MUTED);
+        if ((endpoint == Endpoint.OPENROUTER || endpoint == Endpoint.PLAYER2) && key.isEmpty()) {
+            setStatus(tr(endpoint == Endpoint.PLAYER2 ? "test.no_player2" : "test.no_key"), BAD);
+            return;
+        }
+        setStatus(tr("test.running", endpoint == Endpoint.PLAYER2 ? "Player2" : model), MUTED);
         String tested = model;
         LlmClient.probe(base, key, tested).whenComplete((response, error) -> minecraft.execute(() -> {
             if (!tested.equals(model)) return;
@@ -458,7 +391,7 @@ public final class SettingsScreen extends Screen {
             if (waved) setStatus(tr("test.ok", seconds), GOOD);
             else setStatus(tr("test.no_tool", seconds), BAD);
         }));
-        if (endpoint == Endpoint.OPENROUTER || endpoint == Endpoint.PLAYER2 || endpoint == Endpoint.VOXELMIND) refreshAccount();
+        if (endpoint == Endpoint.OPENROUTER || endpoint == Endpoint.PLAYER2) refreshAccount();
     }
 
     private void save() {
@@ -467,11 +400,14 @@ public final class SettingsScreen extends Screen {
             setStatus(tr("url.invalid"), BAD);
             return;
         }
+        if (LocalConfig.isSparks(base)) {
+            setStatus(tr("sparks_ended"), BAD);
+            return;
+        }
         LocalConfig config = LocalConfig.get();
         config.apiKey = openRouterKey.trim();
         config.endpointKey = endpointKey.trim();
         config.player2Key = player2Key.trim();
-        config.voxelmindKey = voxelmindKey.trim();
         if (!model.equals(config.model)) config.selectModel(model);
         config.selectEndpoint(base);
         LocalConfig.save();

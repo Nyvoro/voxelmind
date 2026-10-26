@@ -59,6 +59,9 @@ for v in "${VERSIONS[@]}"; do
     note="no world (server smoke failed, see $DIR/world-prep.log)"
   else
     cp -r "build/smoke/$v/world" "$DIR/run/saves/smoke"
+    # A 0.5.0 config that thought with VoxelMind Sparks; the mod moves it to Player2 at start (ClientSmoke checks it).
+    mkdir -p "$DIR/run/config"
+    printf '{"baseUrl": "https://api.voxel-mind.com/v1", "voxelmindKey": "vm_smoke_token"}' > "$DIR/run/config/voxelmind-local.json"
     # Skip first-run screens; keep the window quiet.
     printf 'tutorialStep:none\nonboardAccessibility:false\npauseOnLostFocus:false\nskipMultiplayerWarning:true\nlang:en_us\n' > "$DIR/run/options.txt"
     if ! gradle "Set active project to $v" > "$DIR/switch.log" 2>&1; then

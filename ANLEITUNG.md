@@ -1,6 +1,6 @@
 # VoxelMind Local – Testanleitung
 
-Stand 11.10.2026 · Version 0.4.4 für Minecraft **1.21 bis 26.2** (16 Versionen, Fabric); die Test-Instanz nutzt 26.2, Details in `docs/VERSIONS.md`
+Stand 26.10.2026 · Version 0.5.1 für Minecraft **1.21 bis 26.2** (16 Versionen, Fabric); die Test-Instanz nutzt 26.2, Details in `docs/VERSIONS.md`
 
 Drei Arten von KI-Wesen laufen komplett im Mod:
 - **Begleiter** mit echtem Spielerkörper.
@@ -8,10 +8,11 @@ Drei Arten von KI-Wesen laufen komplett im Mod:
 - **God:** ein körperloser Spielleiter.
 
 Es gibt keinen VoxelMind-Server, kein Pflicht-Konto und keine Weltdaten bei der UG. Gedacht wird mit der KI, die der Spieler wählt:
-- Player2 (kostenlos, tägliches Kontingent).
-- **VoxelMind Sparks** (unser Prepaid-Dienst, Anmeldung mit dem Minecraft-Konto).
+- Player2 (kostenlos, tägliches Kontingent; neue Installationen starten hier).
 - Das eigene OpenRouter-Konto.
 - Ein lokales Modell über Ollama, LM Studio oder einen anderen OpenAI-kompatiblen Server.
+
+VoxelMind Sparks, unser Prepaid-Dienst, ist beendet (Verkauf seit 26.10.2026 gestoppt, Gratis-Kontingent bis 08.11.2026) und seit 0.5.1 nicht mehr im Mod. Wer Sparks eingestellt hatte, sieht beim ersten Start von 0.5.1 einmal den Hinweis „VoxelMind Sparks ist beendet“ mit dem Knopf **„KI-Anbieter wählen“** (auf einem dedizierten Server bekommt ihn der erste Operator im Chat). Begleiter, Erinnerungen und alle anderen Einstellungen bleiben; nur die KI-Quelle steht danach auf Player2, und die alte Sparks-Anmeldung wird aus der Config gelöscht.
 
 ## Starten
 
@@ -20,13 +21,6 @@ Es gibt keinen VoxelMind-Server, kein Pflicht-Konto und keine Weltdaten bei der 
 2. **Play**, neue Welt anlegen (Survival, gern „Allow Cheats“ für `/give`, `/time`).
 3. **KI verbinden** (einmalig, gilt für alle Welten der Instanz): Beim Betreten der Welt steht im Chat ein Link **[Settings]**, alternativ `/vml setup` oder eine eigene Taste unter *Optionen → Steuerung → Sonstiges → „VoxelMind: KI-Einstellungen“*.
    - **„KI von: Player2 (kostenlos)“ → „Mit Player2 verbinden“**: Läuft die Player2-App, reicht ein Klick; sonst öffnet sich der Browser und du bestätigst einen Code. Player2 wählt das Modell, Spielen ist kostenlos (tägliches KI-Guthaben „Joules“, mehr mit Player2 Patron). Auf Servern: `/vml player2`. Die Game Client ID von VoxelMind (Player2 Developer Dashboard, „AI Mods“) ist eingebaut; `"player2ClientId"` in der Config überschreibt sie nur bei Bedarf.
-   - **„KI von: VoxelMind Sparks“ → „Mit Minecraft anmelden“:**
-     - Die Anmeldung läuft über dein Minecraft-Konto wie beim Betreten eines Servers: kein Passwort, keine E-Mail.
-     - Neue Konten bekommen 60 Willkommens-Sparks, dazu gibt es täglich 10 gratis. 1 Spark ist etwa 1 Minute Spielzeit.
-     - „Pakete und Preise“ öffnet voxel-mind.com/sparks. Nach der Anmeldung heißt der Knopf „Deine Sparks“ und öffnet deine private Kontoseite (Stand, Verbrauch pro Tag, Gutschriften).
-     - Einen Sparks-Code (z. B. aus unserer Mail an ehemalige Abonnenten) löst du im Spiel mit `/vml sparks redeem <Code>` ein, ohne Mod auf voxel-mind.com/sparks/redeem.
-     - „Token kopieren“ ist für dedizierte Server: dort `/vml endpoint voxelmind`, dann `/vml key <Token>`.
-     - Hinweis: Das braucht die API unter `api.voxel-mind.com`. Im Dev-Client (Offline-Konto) scheitert die Mojang-Anmeldung absichtlich.
    - **„Mit OpenRouter anmelden“** öffnet den Browser. Nach der Anmeldung legt OpenRouter in deinem Konto einen Key für VoxelMind an, der Mod speichert ihn in `config/voxelmind-local.json`. Neue OpenRouter-Konten brauchen etwas Guthaben.
    - Oder einen vorhandenen Key ins Feld einfügen.
    - Oder oben „KI von“ auf **Ollama (dieser PC)** / **LM Studio** / **Anderer Server** umstellen.
@@ -65,15 +59,13 @@ Es gibt keinen VoxelMind-Server, kein Pflicht-Konto und keine Weltdaten bei der 
 | `/vml worlds <Name> this\|all` | nur diese Welt oder mit dir in alle Welten |
 | `/vml skin <Name> <Account, PNG-Link oder Datei.png> [slim]` | Skin eines echten Accounts übernehmen (`/vml skin Lysa Notch`) oder deinen eigenen: `/vml skin Lysa https://…/skin.png` oder eine PNG aus `.minecraft/voxelmind-local/skins/` (`/vml skin Lysa meinskin.png`). Eigene PNGs signiert MineSkin, damit alle sie sehen; schmale Arme werden erkannt, sonst ` slim` anhängen |
 | `/vml stats [on\|off]` | Anonyme Zählung (einmal am Tag: Art des KI-Dienstes, Mod- und Spielversion) anzeigen, ein- oder ausschalten |
-| `/vml list`, `/vml status` | Überblick, aktuelle Aktion, Modell, Key-Anfang, Guthaben (OpenRouter, Player2 oder Sparks) |
-| `/vml sparks` | Sparks-Stand, Link zu Paketen und Preisen, beim Host „[Account]“ (private Kontoseite) und „Token kopieren“ |
-| `/vml sparks redeem <Code>` | Sparks-Code für das angemeldete Konto einlösen (Host oder Operator) |
+| `/vml list`, `/vml status` | Überblick, aktuelle Aktion, Modell, Key-Anfang, Guthaben (OpenRouter oder Player2) |
 | `/vml setup` | KI-Einstellungen als Bildschirm (Singleplayer und LAN-Host) |
 | `/vml login` | Anmeldung mit OpenRouter per Code, auch auf einem dedizierten Server: Link anklicken, anmelden, dann `/vml login <Code>` |
 | `/vml key <Key>` | Key für den aktuellen Endpunkt setzen |
 | `/vml models [Suche]` | Modelle mit Tool-Calls und Kosten pro Stunde, anklickbar |
 | `/vml model <id>`, `/vml model default` | Modell setzen (Tab ergänzt) |
-| `/vml endpoint openrouter\|player2\|voxelmind\|ollama\|lmstudio\|<URL>` | KI-Quelle wechseln |
+| `/vml endpoint player2\|openrouter\|ollama\|lmstudio\|<URL>` | KI-Quelle wechseln |
 | `/vml player2` | Mit Player2 verbinden (Code im Browser bestätigen) |
 | `/vml test` | Verbindungstest mit dem eingestellten Modell |
 | `/vml reload` | Config neu einlesen |
@@ -109,7 +101,7 @@ Werkzeuge des Körpers: go_to, follow, explore, mine_block, gather, dig, collect
 
 Die Kosten zahlt der Spieler direkt an OpenRouter (oder gar nichts bei einem lokalen Modell). Die Modellauswahl schätzt für jedes Modell die Kosten pro Stunde aus dem Listenpreis und gemessenen ~530 Aufrufen à ~8.300 Tokens pro Spielstunde, ohne Prompt-Cache. Für das getestete Standardmodell steht der gemessene Wert.
 
-- Modell `deepseek/deepseek-v4-flash-0731` über OpenRouter, Anbieter-Reihenfolge Relace → Sail Research → Together (US, ohne Datenspeicherung, wie bei VoxelMind Sparks). Bei jedem anderen Modell wählt OpenRouter den Anbieter selbst.
+- Modell `deepseek/deepseek-v4-flash-0731` über OpenRouter, Anbieter-Reihenfolge Relace → Sail Research → Together (US, ohne Datenspeicherung). Bei jedem anderen Modell wählt OpenRouter den Anbieter selbst.
 - **Etwa 10–37 Cent pro Stunde aktiven Spielens**, Schnitt ~20 Cent (151 Aufrufe in 17 Minuten Testspiel: $0,056).
 - Reaktionszeit p50 3,0 s, p90 4,5 s.
 - Technische Bremse: höchstens 20 Anfragen pro Minute (`maxRequestsPerMinute`).

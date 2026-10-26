@@ -7,6 +7,7 @@ import com.voxelmind.local.client.MenuState;
 import com.voxelmind.local.client.ModelPickerScreen;
 import com.voxelmind.local.client.MonitorScreen;
 import com.voxelmind.local.client.SettingsScreen;
+import com.voxelmind.local.client.SparksEndedScreen;
 import com.voxelmind.local.config.LocalConfig;
 import com.voxelmind.local.provider.ModelCatalog;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -14,6 +15,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 
@@ -31,6 +33,7 @@ public class SingleplayerClientTest implements FabricClientGameTest {
     public void runTest(ClientGameTestContext context) {
         // Companions for all worlds live in the game directory and would survive into the next test run.
         deleteTree(GLOBAL_DIR.get());
+        sparksEnded(context);
         try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
             context.waitTicks(60);
             context.runOnClient(mc -> mc.player.connection.sendCommand("vml summon Lysa"));
@@ -102,7 +105,7 @@ public class SingleplayerClientTest implements FabricClientGameTest {
             context.waitTicks(10);
             context.takeScreenshot("vml-10-create");
             // Real clicks on painted controls: the first character chip, then "Create & summon".
-            click(context, 20, 121, true, CREATE_H);
+            click(context, 20, 160, true, CREATE_H);
             context.waitTicks(5);
             click(context, 80, -20, false, CREATE_H);
             singleplayer.getServer().waitFor(server -> server.getPlayerList().getPlayerByName("Ember") != null, 200);
@@ -124,7 +127,7 @@ public class SingleplayerClientTest implements FabricClientGameTest {
             click(context, 160, 27, true, CREATE_H);
             context.waitTicks(10);
             context.takeScreenshot("vml-15-create-builder");
-            click(context, 80, -20, false, CREATE_H);
+            click(context, 80, -20, false, HOSTED_H);
             singleplayer.getServer().waitFor(server -> {
                 var c = com.voxelmind.local.companion.CompanionManager.get().find(me, "Pixie");
                 return c != null && c.hosted instanceof com.voxelmind.local.hosted.BuilderMind b && b.active() && b.bodyEntity() != null;
@@ -136,12 +139,12 @@ public class SingleplayerClientTest implements FabricClientGameTest {
             context.setScreen(() -> new CompanionEditScreen(new CompanionsScreen(null), null));
             context.getInput().typeChars("Zeus");
             context.waitTicks(5);
-            click(context, 260, 27, true, CREATE_H);
+            click(context, 320, 27, true, CREATE_H);
             context.waitTicks(5);
-            click(context, 300, 59, true, CREATE_H);
+            click(context, 380, 59, true, HOSTED_H);
             context.waitTicks(5);
             context.takeScreenshot("vml-17-create-god");
-            click(context, 80, -20, false, CREATE_H);
+            click(context, 80, -20, false, HOSTED_H);
             singleplayer.getServer().waitFor(server -> {
                 var c = com.voxelmind.local.companion.CompanionManager.get().find(me, "Zeus");
                 return c != null && c.hosted != null && c.hosted.active() && c.state.chaos == 5;
@@ -227,6 +230,41 @@ public class SingleplayerClientTest implements FabricClientGameTest {
         }
     }
 
+    /**
+     * An update from a 0.5.0 config that thought with VoxelMind Sparks: the title screen says once that Sparks ended and
+     * leads to the AI settings; the other settings stay and the old sign-in leaves the file. The test's own config comes back after.
+     */
+    private static void sparksEnded(ClientGameTestContext context) {
+        Path file = LocalConfig.path();
+        try {
+            String before = Files.exists(file) ? Files.readString(file) : null;
+            Files.writeString(file, """
+                    {"apiKey": "sk-or-v1-kept", "baseUrl": "https://api.voxel-mind.com/v1", "voxelmindKey": "vm_test_token",
+                     "voxelmindName": "Steve", "model": "acme/kept-model"}""");
+            context.runOnClient(mc -> LocalConfig.load());
+            context.waitForScreen(SparksEndedScreen.class);
+            context.waitTicks(5);
+            context.takeScreenshot("vml-00-sparks-ended");
+            String migrated = Files.readString(file);
+            if (migrated.contains("vm_test_token") || !migrated.contains("sk-or-v1-kept") || !migrated.contains("acme/kept-model")
+                    || !migrated.contains("api.player2.game")) {
+                throw new AssertionError("config after the Sparks migration: " + migrated);
+            }
+            context.clickScreenButton("voxelmind_local.sparks_ended.choose");
+            context.waitForScreen(SettingsScreen.class);
+            context.waitTicks(10);
+            context.takeScreenshot("vml-00b-settings-after-sparks");
+            context.clickScreenButton("gui.cancel");
+            context.waitForScreen(TitleScreen.class);
+            if (context.computeOnClient(mc -> LocalConfig.get().sparksEndedNotice)) throw new AssertionError("the Sparks notice came twice");
+            if (before == null) Files.deleteIfExists(file);
+            else Files.writeString(file, before);
+            context.runOnClient(mc -> LocalConfig.load());
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     private static final java.util.function.Supplier<Path> GLOBAL_DIR = () ->
             FabricLoader.getInstance().getGameDir().resolve("voxelmind-local").resolve("companions");
 
@@ -243,14 +281,17 @@ public class SingleplayerClientTest implements FabricClientGameTest {
      * Clicks inside a panel of the given height: {@code dx} from the panel's left edge (or from the screen
      * centre when {@code fromLeft} is false), {@code dy} from its top (or, negative, from its bottom).
      */
-    private static final int CREATE_H = 236;
+    private static final int CREATE_H = 268;
+    /** The editor's height once Builder or God is chosen, and its width (CompanionEditScreen since 0.5.0). */
+    private static final int HOSTED_H = 240;
+    private static final int EDIT_W = 400;
 
     private static void click(ClientGameTestContext context, int dx, int dy, boolean fromLeft, int panelHeight) {
         double[] pos = context.computeOnClient(mc -> {
             var s = mc.gui.screen();
             int h = Math.min(panelHeight, s.height - 8);
             int top = Math.max(4, (s.height - h) / 2);
-            int left = s.width / 2 - 160;
+            int left = s.width / 2 - Math.min(EDIT_W, s.width - 8) / 2;
             double x = fromLeft ? left + dx : s.width / 2.0 + dx;
             double y = dy >= 0 ? top + dy : top + h + dy;
             double scale = mc.getWindow().getGuiScale();

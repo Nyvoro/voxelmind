@@ -23,20 +23,19 @@ import java.util.Locale;
 
 /**
  * One anonymous count a day of which kind of AI service this installation uses, so we can see what players pick:
- * VoxelMind Sparks, Player2, OpenRouter, a local model or another endpoint. The count carries that kind and the mod
- * and game versions; no name, no id, no key and nothing from a chat. The VoxelMind API adds it to a counter per day
- * and kind and keeps nothing else. Nothing is sent before the host (or an owner-level operator) was told in the
+ * Player2, OpenRouter, a local model or another endpoint. The count carries that kind and the mod and game versions;
+ * no name, no id, no key and nothing from a chat. api.voxel-mind.com adds it to a counter per day and kind and keeps
+ * nothing else. Nothing is sent before the host (or an owner-level operator) was told in the
  * game; "usageStats": false in the config or /vml stats off turns it off.
  */
 public final class UsageStats {
-    public static final String URL = VoxelMindApi.BASE + "/ping";
+    public static final String URL = "https://api.voxel-mind.com/v1/ping";
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
 
     private UsageStats() {}
 
     /** The kind of service the configured endpoint is. */
     public static String kind(LocalConfig config) {
-        if (config.isVoxelMind()) return "sparks";
         if (config.isPlayer2()) return "player2";
         if (config.isOpenRouter()) return "openrouter";
         return isLocal(config.baseUrl) ? "local" : "custom";
@@ -83,7 +82,7 @@ public final class UsageStats {
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
             HTTP.sendAsync(request, HttpResponse.BodyHandlers.discarding()).exceptionally(e -> null);
         } catch (IllegalArgumentException e) {
-            // A broken voxelmind.api property in a development run; a count is never worth an error.
+            // A count is never worth an error.
         }
     }
 
@@ -168,7 +167,7 @@ public final class UsageStats {
     public static MutableComponent notice() {
         return Component.literal("[VoxelMind] ").withStyle(ChatFormatting.GRAY)
                 .append(Component.translatableWithFallback("voxelmind_local.stats.notice",
-                        "So we can see which AI services players pick, the mod sends one anonymous count a day: the kind of service (VoxelMind Sparks, Player2, OpenRouter or a local model) and the mod and game version. No name, no ID, nothing from your chats.")
+                        "So we can see which AI services players pick, the mod sends one anonymous count a day: the kind of service (Player2, OpenRouter or a local model) and the mod and game version. No name, no ID, nothing from your chats.")
                         .withStyle(ChatFormatting.GRAY))
                 .append(" ")
                 .append(Component.translatableWithFallback("voxelmind_local.stats.turn_off", "[Turn off]").withStyle(style -> style
